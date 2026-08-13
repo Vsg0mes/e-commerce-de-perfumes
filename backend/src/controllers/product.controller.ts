@@ -75,25 +75,56 @@ export const getProductById = async (req: Request, res: Response) => {
   }
 };
 
+export const getBrands = async (_req: Request, res: Response) => {
+  try {
+    const brands = await prisma.brand.findMany({ orderBy: { name: 'asc' } });
+    res.json({ success: true, data: brands });
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const getCategories = async (_req: Request, res: Response) => {
+  try {
+    const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } });
+    res.json({ success: true, data: categories });
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 const productSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  price: z.number().min(0),
-  promotionalPrice: z.number().min(0).optional(),
-  stock: z.number().min(0),
+  name: z.string().min(1, 'Nome é obrigatório'),
+  description: z.string().min(1, 'Descrição é obrigatória'),
+  price: z.preprocess((v) => parseFloat(v as string), z.number().min(0)),
+  promotionalPrice: z.preprocess((v) => (v ? parseFloat(v as string) : undefined), z.number().min(0).optional()),
+  stock: z.preprocess((v) => parseInt(v as string, 10), z.number().min(0)),
   image: z.string().optional(),
   gender: z.string().optional(),
   olfactoryFamily: z.string().optional(),
   concentration: z.string().optional(),
   volume: z.string().optional(),
-  brandId: z.string(),
-  categoryId: z.string(),
+  brandId: z.string().min(1, 'Marca é obrigatória'),
+  categoryId: z.string().min(1, 'Categoria é obrigatória'),
 });
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    const data = productSchema.parse(req.body);
-    const product = await prisma.product.create({ data });
+    const payload = { ...req.body };
+
+    if (req.file) {
+      const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+      payload.image = `${backendUrl}/uploads/${req.file.filename}`;
+    }
+
+    const data = productSchema.parse(payload);
+    const product = await prisma.product.create({
+      data,
+      include: { brand: true, category: true }
+    });
+
     res.status(201).json({ success: true, data: product });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -107,8 +138,20 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const data = productSchema.partial().parse(req.body);
-    const product = await prisma.product.update({ where: { id }, data });
+    const payload = { ...req.body };
+
+    if (req.file) {
+      const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+      payload.image = `${backendUrl}/uploads/${req.file.filename}`;
+    }
+
+    const data = productSchema.partial().parse(payload);
+    const product = await prisma.product.update({
+      where: { id },
+      data,
+      include: { brand: true, category: true }
+    });
+
     res.json({ success: true, data: product });
   } catch (error) {
     if (error instanceof z.ZodError) {
