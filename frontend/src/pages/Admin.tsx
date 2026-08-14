@@ -142,23 +142,26 @@ export function Admin() {
   if (user?.role !== 'ADMIN') {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center">
-        <div className="inline-flex items-center justify-center p-4 bg-red-50 text-red-500 rounded-full mb-4">
+        <div className="inline-flex items-center justify-center p-4 bg-red-50 dark:bg-red-950/30 text-red-500 rounded-full mb-4">
           <AlertCircle size={32} />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900">Acesso Restrito</h2>
-        <p className="text-gray-500 mt-2">Você precisa de permissão de administrador para acessar esta área.</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Acesso Restrito</h2>
+        <p className="text-gray-500 dark:text-gray-400 mt-2">Você precisa de permissão de administrador para acessar esta área.</p>
       </div>
     );
   }
 
+  const inputClass = "w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+  const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
+      <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200 dark:border-gray-800">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-gray-900">Painel Administrativo</h1>
-          <p className="text-sm text-gray-500 mt-1">Gerencie seu catálogo de perfumes</p>
+          <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100">Painel Administrativo</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gerencie seu catálogo de perfumes</p>
         </div>
-        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">
           Admin Logado
         </span>
       </div>
@@ -166,7 +169,7 @@ export function Admin() {
       {message && (
         <div
           className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${
-            message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+            message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
           }`}
         >
           {message.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
@@ -174,9 +177,9 @@ export function Admin() {
         </div>
       )}
 
-      <div className="bg-white shadow-sm rounded-2xl border border-gray-100 p-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <PlusCircle className="text-indigo-600" size={24} />
+      <div className="bg-white dark:bg-gray-900 shadow-sm rounded-2xl border border-gray-100 dark:border-gray-800 p-8">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6 flex items-center gap-2">
+          <PlusCircle className="text-indigo-600 dark:text-indigo-400" size={24} />
           Cadastrar Novo Perfume
         </h2>
 
@@ -184,24 +187,24 @@ export function Admin() {
           {/* Nome e Marca/Categoria */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Perfume *</label>
+              <label className={labelClass}>Nome do Perfume *</label>
               <input
                 required
                 type="text"
                 placeholder="Ex: Bleu de Chanel Eau de Parfum"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Marca *</label>
+              <label className={labelClass}>Marca *</label>
               <select
                 required
                 value={formData.brandId}
                 onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               >
                 <option value="">Selecione uma marca...</option>
                 {brands.map((b) => (
@@ -213,12 +216,12 @@ export function Admin() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
+              <label className={labelClass}>Categoria *</label>
               <select
                 required
                 value={formData.categoryId}
                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               >
                 <option value="">Selecione uma categoria...</option>
                 {categories.map((c) => (
@@ -232,21 +235,21 @@ export function Admin() {
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descrição detalhada *</label>
+            <label className={labelClass}>Descrição detalhada *</label>
             <textarea
               required
               rows={3}
               placeholder="Descreva as notas de topo, coração e fundo do perfume..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className={inputClass}
             />
           </div>
 
           {/* Preços e Estoque */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Preço (R$) *</label>
+              <label className={labelClass}>Preço (R$) *</label>
               <input
                 required
                 type="number"
@@ -255,12 +258,12 @@ export function Admin() {
                 placeholder="299.90"
                 value={formData.price}
                 onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Preço Promocional (R$)</label>
+              <label className={labelClass}>Preço Promocional (R$)</label>
               <input
                 type="number"
                 step="0.01"
@@ -268,12 +271,12 @@ export function Admin() {
                 placeholder="Opcional"
                 value={formData.promotionalPrice}
                 onChange={(e) => setFormData({ ...formData, promotionalPrice: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estoque *</label>
+              <label className={labelClass}>Estoque *</label>
               <input
                 required
                 type="number"
@@ -281,7 +284,7 @@ export function Admin() {
                 placeholder="10"
                 value={formData.stock}
                 onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
           </div>
@@ -289,11 +292,11 @@ export function Admin() {
           {/* Atributos Olfativos */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gênero</label>
+              <label className={labelClass}>Gênero</label>
               <select
                 value={formData.gender}
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               >
                 <option value="Masculino">Masculino</option>
                 <option value="Feminino">Feminino</option>
@@ -302,11 +305,11 @@ export function Admin() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Concentração</label>
+              <label className={labelClass}>Concentração</label>
               <select
                 value={formData.concentration}
                 onChange={(e) => setFormData({ ...formData, concentration: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               >
                 <option value="Eau de Parfum">Eau de Parfum (EDP)</option>
                 <option value="Eau de Toilette">Eau de Toilette (EDT)</option>
@@ -316,36 +319,36 @@ export function Admin() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Volume</label>
+              <label className={labelClass}>Volume</label>
               <input
                 type="text"
                 placeholder="Ex: 100ml"
                 value={formData.volume}
                 onChange={(e) => setFormData({ ...formData, volume: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={inputClass}
               />
             </div>
           </div>
 
           {/* Upload de Imagem */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Foto do Produto</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Foto do Produto</label>
 
             <div className="space-y-4">
               {/* Dropzone / Upload Box */}
               {!imagePreview ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/30 transition-all group"
+                  className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all group"
                 >
-                  <div className="mx-auto w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                     <Upload size={22} />
                   </div>
-                  <p className="text-sm font-medium text-gray-700">Clique para fazer upload da foto</p>
-                  <p className="text-xs text-gray-400 mt-1">PNG, JPG ou WEBP até 5MB</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Clique para fazer upload da foto</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">PNG, JPG ou WEBP até 5MB</p>
                 </div>
               ) : (
-                <div className="relative inline-block border border-gray-200 rounded-xl p-2 bg-gray-50">
+                <div className="relative inline-block border border-gray-200 dark:border-gray-700 rounded-xl p-2 bg-gray-50 dark:bg-gray-800">
                   <img
                     src={imagePreview}
                     alt="Preview"
@@ -372,7 +375,7 @@ export function Admin() {
 
               {/* Ou URL alternativa */}
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">ou insira a URL da imagem</p>
+                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">ou insira a URL da imagem</p>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                     <ImageIcon size={18} />
@@ -387,7 +390,7 @@ export function Admin() {
                         setImagePreview(e.target.value);
                       }
                     }}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>

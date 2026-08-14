@@ -40,8 +40,8 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   return (
-    <Link to={`/product/${product.id}`} className="group relative block overflow-hidden rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow border border-gray-100">
-      <div className="aspect-h-4 aspect-w-3 bg-gray-200 sm:aspect-none sm:h-72">
+    <Link to={`/product/${product.id}`} className="group relative block overflow-hidden rounded-lg bg-white dark:bg-gray-900 shadow-sm hover:shadow-md transition-all border border-gray-100 dark:border-gray-800">
+      <div className="aspect-h-4 aspect-w-3 bg-gray-200 dark:bg-gray-800 sm:aspect-none sm:h-72">
         <img
           src={product.image || 'https://via.placeholder.com/300x400?text=Sem+Imagem'}
           alt={product.name}
@@ -49,18 +49,18 @@ export function ProductCard({ product }: ProductCardProps) {
         />
       </div>
       <div className="p-4 flex flex-col flex-1">
-        <h3 className="text-sm text-gray-500 mb-1">{product.brand?.name}</h3>
-        <p className="text-lg font-medium text-gray-900 mb-2 truncate">{product.name}</p>
+        <h3 className="text-sm text-gray-500 dark:text-gray-400 mb-1">{product.brand?.name}</h3>
+        <p className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2 truncate">{product.name}</p>
         
         <div className="flex items-center justify-between mt-auto pt-4">
           <div>
             {product.promotionalPrice ? (
               <div className="flex flex-col">
-                <span className="text-sm text-gray-500 line-through">{formatPrice(product.price)}</span>
-                <span className="text-lg font-bold text-indigo-600">{formatPrice(product.promotionalPrice)}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400 line-through">{formatPrice(product.price)}</span>
+                <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{formatPrice(product.promotionalPrice)}</span>
               </div>
             ) : (
-              <span className="text-lg font-bold text-gray-900">{formatPrice(product.price)}</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatPrice(product.price)}</span>
             )}
           </div>
           
@@ -69,8 +69,8 @@ export function ProductCard({ product }: ProductCardProps) {
             disabled={product.stock === 0}
             className={`p-2 rounded-full flex items-center justify-center transition-colors ${
               product.stock > 0 
-                ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white' 
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white' 
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed'
             }`}
             title={product.stock > 0 ? "Adicionar ao carrinho" : "Esgotado"}
           >

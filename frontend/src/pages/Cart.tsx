@@ -12,11 +12,11 @@ export function Cart() {
   if (items.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-        <h2 className="text-3xl font-serif font-bold text-gray-900 mb-4">Seu carrinho está vazio</h2>
-        <p className="text-gray-500 mb-8">Descubra fragrâncias incríveis em nosso catálogo.</p>
+        <h2 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100 mb-4">Seu carrinho está vazio</h2>
+        <p className="text-gray-500 dark:text-gray-400 mb-8">Descubra fragrâncias incríveis em nosso catálogo.</p>
         <Link 
           to="/" 
-          className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+          className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
         >
           Continuar Comprando
         </Link>
@@ -26,18 +26,18 @@ export function Cart() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-serif font-bold text-gray-900 mb-8">Carrinho de Compras</h1>
+      <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100 mb-8">Carrinho de Compras</h1>
 
       <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 lg:items-start">
         <div className="lg:col-span-8">
-          <ul role="list" className="border-t border-b border-gray-200 divide-y divide-gray-200">
+          <ul role="list" className="border-t border-b border-gray-200 dark:border-gray-800 divide-y divide-gray-200 dark:divide-gray-800">
             {items.map((item) => (
               <li key={item.id} className="flex py-6 sm:py-10">
                 <div className="flex-shrink-0">
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-24 h-24 rounded-md object-center object-cover sm:w-32 sm:h-32"
+                    className="w-24 h-24 rounded-md object-center object-cover sm:w-32 sm:h-32 bg-gray-100 dark:bg-gray-800"
                   />
                 </div>
 
@@ -46,28 +46,28 @@ export function Cart() {
                     <div>
                       <div className="flex justify-between">
                         <h3 className="text-lg">
-                          <Link to={`/product/${item.productId}`} className="font-medium text-gray-700 hover:text-gray-800">
+                          <Link to={`/product/${item.productId}`} className="font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white">
                             {item.name}
                           </Link>
                         </h3>
                       </div>
-                      <p className="mt-1 text-sm font-medium text-gray-900">{formatPrice(item.price)}</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{formatPrice(item.price)}</p>
                     </div>
 
                     <div className="mt-4 sm:mt-0 sm:pr-9">
-                      <div className="flex items-center border border-gray-300 rounded-md max-w-[120px]">
+                      <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-md max-w-[120px] bg-white dark:bg-gray-900">
                         <button 
                           onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                          className="px-3 py-1 text-gray-600 hover:text-gray-900"
+                          className="px-3 py-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
                         >
                           <Minus size={16} />
                         </button>
-                        <span className="flex-1 text-center py-1 text-gray-900 font-medium">
+                        <span className="flex-1 text-center py-1 text-gray-900 dark:text-gray-100 font-medium">
                           {item.quantity}
                         </span>
                         <button 
                           onClick={() => updateQuantity(item.id, Math.min(item.maxStock, item.quantity + 1))}
-                          className="px-3 py-1 text-gray-600 hover:text-gray-900"
+                          className="px-3 py-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
                           disabled={item.quantity >= item.maxStock}
                         >
                           <Plus size={16} />
@@ -92,37 +92,37 @@ export function Cart() {
           </ul>
         </div>
 
-        <div className="mt-16 bg-gray-50 rounded-lg px-4 py-6 sm:p-6 lg:p-8 lg:mt-0 lg:col-span-4">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Resumo do Pedido</h2>
+        <div className="mt-16 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-6 sm:p-6 lg:p-8 lg:mt-0 lg:col-span-4">
+          <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Resumo do Pedido</h2>
           
-          <dl className="space-y-4 text-sm text-gray-600">
+          <dl className="space-y-4 text-sm text-gray-600 dark:text-gray-400">
             <div className="flex justify-between">
               <dt>Subtotal</dt>
-              <dd className="font-medium text-gray-900">{formatPrice(getTotal())}</dd>
+              <dd className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(getTotal())}</dd>
             </div>
             
             <div className="flex justify-between">
               <dt className="flex items-center">Desconto</dt>
-              <dd className="font-medium text-green-600">- R$ 0,00</dd>
+              <dd className="font-medium text-green-600 dark:text-green-400">- R$ 0,00</dd>
             </div>
             
-            <div className="flex justify-between items-center border-t border-gray-200 pt-4">
-              <dt className="text-base font-medium text-gray-900">Total</dt>
-              <dd className="text-xl font-bold text-gray-900">{formatPrice(getTotal())}</dd>
+            <div className="flex justify-between items-center border-t border-gray-200 dark:border-gray-800 pt-4">
+              <dt className="text-base font-medium text-gray-900 dark:text-gray-100">Total</dt>
+              <dd className="text-xl font-bold text-gray-900 dark:text-gray-100">{formatPrice(getTotal())}</dd>
             </div>
           </dl>
 
           <div className="mt-6">
             <Link
               to="/checkout"
-              className="w-full bg-indigo-600 border border-transparent rounded-md shadow-sm py-3 px-4 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-50 focus:ring-indigo-500 flex items-center justify-center transition-colors"
+              className="w-full bg-indigo-600 border border-transparent rounded-md shadow-sm py-3 px-4 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center justify-center transition-colors"
             >
               Finalizar Compra
               <ArrowRight className="ml-2" size={20} />
             </Link>
           </div>
           <div className="mt-4 text-center">
-            <Link to="/" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+            <Link to="/" className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500">
               ou Continuar Comprando
             </Link>
           </div>
