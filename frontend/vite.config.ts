@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: ['postbox-mandarin-outage.ngrok-free.dev']
+    host: '0.0.0.0',
+    port: 5173,
+    // Permite acesso via reverse proxy (Nginx, ngrok externo, etc.)
+    allowedHosts: 'all',
   }
 })
