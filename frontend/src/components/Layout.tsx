@@ -16,7 +16,7 @@ export function Layout() {
   }, [isDark]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+    <div className="flex flex-col min-h-screen bg-[#080808] text-gray-100 transition-colors duration-300">
       <Header />
       <main className="flex-grow">
         <Outlet />

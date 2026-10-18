@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Package } from 'lucide-react';
 
 export function Orders() {
-  const [orders, setOrders] = useState([]);
+  const [orders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
