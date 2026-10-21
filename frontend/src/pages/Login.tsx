@@ -1,7 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Eye, EyeOff, Mail, Lock, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Sparkles, Truck, ShieldCheck, Gem } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 export function Login() {
@@ -38,45 +38,54 @@ export function Login() {
 
   return (
     <div className="min-h-[85vh] flex">
-      {/* Left panel - decorative */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-gray-900 via-indigo-950 to-gray-900 items-center justify-center relative overflow-hidden">
-        {/* Background orbs */}
-        <div className="absolute w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl -top-20 -left-20"></div>
-        <div className="absolute w-80 h-80 bg-purple-500/20 rounded-full blur-3xl bottom-0 right-0"></div>
-
-        <div className="relative z-10 text-center px-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mb-8 border border-white/20">
-            <Sparkles size={40} className="text-indigo-300" />
-          </div>
-          <h1 className="font-serif text-5xl font-bold text-white mb-4 tracking-tight">Essence</h1>
-          <p className="text-indigo-200 text-lg leading-relaxed max-w-xs mx-auto">
-            Descubra fragrâncias exclusivas e luxuosas para todos os momentos.
+      {/* Left panel - cinematic */}
+      <div className="hidden lg:flex lg:w-1/2 auth-hero flex-col relative overflow-hidden bg-[#080808]">
+        <div className="relative z-10 text-center px-12 pt-12">
+          <Sparkles size={20} className="text-[#D4AF37] mx-auto mb-4" />
+          <h1 className="font-serif text-5xl font-light uppercase text-white mb-3 tracking-[0.3em]">Memorare</h1>
+          <p className="text-gray-300 text-xs tracking-[0.25em] uppercase max-w-xs mx-auto leading-relaxed">
+            Fragrâncias que ficam na memória
           </p>
+        </div>
 
-          {/* Fake perfume bottles decoration */}
-          <div className="mt-12 flex justify-center gap-6 opacity-60">
-            {[1, 2, 3].map(i => (
-              <div
-                key={i}
-                className="bg-white/10 border border-white/20 rounded-2xl backdrop-blur-sm"
-                style={{ width: `${50 + i * 12}px`, height: `${80 + i * 16}px` }}
-              />
+        {/* Frasco com fundo transparente, reduzido a partir de uma imagem maior para manter a nitidez */}
+        <div className="relative flex-1 min-h-0 flex items-center justify-center py-4 px-12">
+          <div className="absolute w-56 h-56 rounded-full bg-[#D4AF37]/15 blur-3xl" />
+          <img
+            src="/images/login-bottle.png"
+            alt="Memorare MMRR Eau de Parfum"
+            className="relative h-[400px] max-h-full w-auto object-contain drop-shadow-[0_20px_35px_rgba(0,0,0,0.8)]"
+          />
+        </div>
+        <div className="relative z-10 px-12 pb-10">
+          <p className="font-serif italic text-xl text-white text-center leading-snug max-w-sm mx-auto">
+            “O perfume é a forma mais intensa de memória.”
+          </p>
+          <div className="mt-6 pt-5 border-t border-[#D4AF37]/30 grid grid-cols-3 gap-4 text-center">
+            {[
+              { icon: Truck, label: 'Entrega rápida' },
+              { icon: ShieldCheck, label: 'Compra segura' },
+              { icon: Gem, label: 'Alta perfumaria' },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex flex-col items-center gap-2">
+                <Icon size={18} className="text-[#D4AF37]" />
+                <span className="text-[10px] uppercase tracking-[0.2em] text-gray-300">{label}</span>
+              </div>
             ))}
           </div>
         </div>
       </div>
-
       {/* Right panel - form */}
-      <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-[#080808]">
         <div className="max-w-md w-full">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
-            <h1 className="font-serif text-4xl font-bold text-gray-900 tracking-tight">Essence</h1>
+            <h1 className="font-serif text-4xl font-light uppercase text-gray-900 dark:text-white tracking-[0.3em]">Memorare</h1>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          <div className="bg-white dark:bg-[#161616] rounded-2xl shadow-sm border border-gray-100 dark:border-[#27272a] p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">Bem-vindo de volta</h2>
+              <h2 className="font-serif text-3xl font-medium text-gray-900 dark:text-white tracking-wide">Bem-vindo de volta</h2>
               <p className="mt-1 text-sm text-gray-500">Entre na sua conta para continuar comprando</p>
             </div>
 
@@ -88,7 +97,7 @@ export function Login() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-mail</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Mail size={18} className="text-gray-400" />
@@ -100,13 +109,13 @@ export function Login() {
                     placeholder="seu@email.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="block w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    className="block w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-[#3f3f46] bg-white dark:bg-[#080808] text-gray-900 dark:text-white rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/50 focus:border-transparent transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Lock size={18} className="text-gray-400" />
@@ -118,7 +127,7 @@ export function Login() {
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-12 py-3 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    className="block w-full pl-10 pr-12 py-3 border border-gray-200 dark:border-[#3f3f46] bg-white dark:bg-[#080808] text-gray-900 dark:text-white rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/50 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
@@ -133,11 +142,11 @@ export function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center py-3 px-4 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-full flex justify-center items-center py-3 px-4 bg-gold-gradient text-[#080808] font-semibold uppercase tracking-[0.2em] text-xs rounded-lg hover:brightness-110 hover:shadow-[0_0_25px_rgba(212,175,55,0.35)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#D4AF37]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {loading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-[#080808]" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
@@ -148,17 +157,17 @@ export function Login() {
             </form>
 
             {/* Divider */}
-            <div className="mt-6 border-t border-gray-100 pt-6">
+            <div className="mt-6 border-t border-gray-100 dark:border-[#27272a] pt-6">
               <p className="text-center text-sm text-gray-500">
                 Não tem uma conta?{' '}
-                <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors">
+                <Link to="/register" className="font-medium text-[#D4AF37] hover:text-[#E5C358] transition-colors">
                   Cadastre-se grátis
                 </Link>
               </p>
             </div>
 
             {/* Dev hint */}
-            <div className="mt-4 bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-700">
+            <div className="mt-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-300">
               <strong>Dev:</strong> admin@ecommerce.com / admin123
             </div>
           </div>

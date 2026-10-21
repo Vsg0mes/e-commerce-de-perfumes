@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -69,3 +69,109 @@
     -webkit-backdrop-filter: blur(12px);
   }
 }
+
+/* ===== Modo claro =====
+   Os componentes usam cores escuras fixas; no modo claro (sem a classe .dark em <html>)
+   remapeamos essas utilidades para uma paleta clara. */
+html:not(.dark) { color-scheme: light; }
+html:not(.dark) body { background-color: #faf8f3; color: #1a1a1c; }
+html:not(.dark) ::-webkit-scrollbar-track { background: #f1ede4; }
+html:not(.dark) ::-webkit-scrollbar-thumb { background: #cfc8b8; border-color: #f1ede4; }
+
+/* Fundos escuros -> claros */
+html:not(.dark) .bg-\[\#050505\],
+html:not(.dark) .bg-\[\#060607\],
+html:not(.dark) .bg-\[\#080808\],
+html:not(.dark) .bg-\[\#0a0a0c\],
+html:not(.dark) .bg-\[\#0b0b0d\],
+html:not(.dark) .bg-\[\#101012\] { background-color: #faf8f3; }
+html:not(.dark) .bg-\[\#080808\]\/80,
+html:not(.dark) .bg-\[\#080808\]\/95 { background-color: rgba(250, 248, 243, 0.92); }
+html:not(.dark) .bg-\[\#0a0a0c\]\/85 { background-color: rgba(250, 248, 243, 0.88); }
+html:not(.dark) .bg-\[\#121214\],
+html:not(.dark) .bg-\[\#18181b\],
+html:not(.dark) .bg-\[\#18181c\],
+html:not(.dark) .bg-\[\#1a1a1e\],
+html:not(.dark) .bg-\[\#1c1c20\],
+html:not(.dark) .bg-\[\#1e1e24\],
+html:not(.dark) .bg-\[\#1f1f24\],
+html:not(.dark) .bg-gray-900 { background-color: #ffffff; }
+html:not(.dark) .bg-\[\#24242a\],
+html:not(.dark) .bg-\[\#27272a\] { background-color: #ece7da; }
+html:not(.dark) .bg-\[\#121214\]\/50,
+html:not(.dark) .bg-\[\#121214\]\/60,
+html:not(.dark) .bg-\[\#121214\]\/70,
+html:not(.dark) .bg-\[\#121214\]\/80,
+html:not(.dark) .bg-\[\#121214\]\/90 { background-color: rgba(255, 255, 255, 0.85); }
+html:not(.dark) .hover\:bg-\[\#18181b\]:hover { background-color: #f3efe6; }
+html:not(.dark) .bg-white\/10 { background-color: rgba(0, 0, 0, 0.05); }
+html:not(.dark) .hover\:bg-white\/5:hover { background-color: rgba(0, 0, 0, 0.04); }
+
+/* Gradientes escuros */
+html:not(.dark) .from-\[\#141418\],
+html:not(.dark) .from-\[\#18181b\]\/90,
+html:not(.dark) .from-\[\#18181b\]\/95,
+html:not(.dark) .from-\[\#18181c\],
+html:not(.dark) .from-\[\#1c1c20\]\/95,
+html:not(.dark) .from-gray-900 { --tw-gradient-from: #ffffff var(--tw-gradient-from-position); --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+html:not(.dark) .to-\[\#080808\],
+html:not(.dark) .to-\[\#0a0a0c\],
+html:not(.dark) .to-\[\#0d0d0f\],
+html:not(.dark) .to-gray-900 { --tw-gradient-to: #f3efe6 var(--tw-gradient-to-position); }
+html:not(.dark) .via-\[\#0e0e10\],
+html:not(.dark) .via-\[\#111113\],
+html:not(.dark) .via-\[\#151518\],
+html:not(.dark) .via-\[\#1a1a1c\],
+html:not(.dark) .via-\[\#1c1c1e\] { --tw-gradient-stops: var(--tw-gradient-from), #f7f3ea var(--tw-gradient-via-position), var(--tw-gradient-to); }
+
+/* Bordas */
+html:not(.dark) .border-\[\#1a1a1c\],
+html:not(.dark) .border-\[\#1a1a1e\],
+html:not(.dark) .border-\[\#1c1c20\],
+html:not(.dark) .border-\[\#1e1e22\],
+html:not(.dark) .border-\[\#1f1f23\],
+html:not(.dark) .border-\[\#222226\],
+html:not(.dark) .border-\[\#27272a\],
+html:not(.dark) .border-\[\#2a2a30\],
+html:not(.dark) .border-\[\#2c2c32\],
+html:not(.dark) .border-gray-800 { border-color: #e6dfcf; }
+html:not(.dark) .border-\[\#333338\],
+html:not(.dark) .border-\[\#3f3f46\],
+html:not(.dark) .border-\[\#3f3f46\]\/80,
+html:not(.dark) .border-\[\#3f3f46\]\/90 { border-color: #d6cdb8; }
+html:not(.dark) .divide-\[\#222226\] > :not([hidden]) ~ :not([hidden]) { border-color: #e6dfcf; }
+html:not(.dark) .border-white\/10,
+html:not(.dark) .border-white\/20 { border-color: rgba(0, 0, 0, 0.1); }
+
+/* Textos */
+html:not(.dark) .text-white,
+html:not(.dark) .hover\:text-white:hover,
+html:not(.dark) .text-gray-100,
+html:not(.dark) .text-gray-200 { color: #1a1a1c; }
+html:not(.dark) .text-gray-300 { color: #3f3f46; }
+html:not(.dark) .text-gray-400 { color: #5b5b63; }
+html:not(.dark) .text-gray-500 { color: #6b6b73; }
+html:not(.dark) .placeholder-gray-500::placeholder { color: #8a8a92; }
+html:not(.dark) .text-\[\#D4AF37\],
+html:not(.dark) .hover\:text-\[\#D4AF37\]:hover { color: #8C6D1F; }
+html:not(.dark) .text-\[\#F3E5AB\] { color: #997B20; }
+
+/* Texto sobre fundo dourado deve continuar legível */
+html:not(.dark) .bg-\[\#D4AF37\] .text-white,
+html:not(.dark) .bg-gold-gradient .text-white,
+html:not(.dark) .bg-\[\#D4AF37\].text-white { color: #080808; }
+
+/* Sombras mais suaves */
+html:not(.dark) [class*="rgba(0,0,0"] { --tw-shadow-color: rgba(0, 0, 0, 0.12); }
+
+html:not(.dark) .glass-luxury { background: rgba(255, 255, 255, 0.75); }
+html:not(.dark) .glass-card { background: rgba(255, 255, 255, 0.85); }
+
+/* Painel decorativo das telas de login/cadastro: sempre escuro */
+.auth-hero { background: radial-gradient(ellipse at 30% 20%, rgba(212,175,55,0.14) 0%, transparent 55%), radial-gradient(ellipse at 80% 90%, rgba(212,175,55,0.08) 0%, transparent 50%), linear-gradient(160deg, #161616 0%, #080808 60%, #000 100%); }
+html:not(.dark) .auth-hero .text-\[\#D4AF37\] { color: #D4AF37; }
+html:not(.dark) .auth-hero .text-gray-300 { color: #d4d4d8; }
+html:not(.dark) .auth-hero .text-white { color: #ffffff; }
+html:not(.dark) .auth-hero .bg-white\/10 { background-color: rgba(255, 255, 255, 0.1); }
+html:not(.dark) .auth-hero .border-white\/20 { border-color: rgba(255, 255, 255, 0.2); }
+html:not(.dark) .auth-hero .border-white\/10 { border-color: rgba(255, 255, 255, 0.1); }
