@@ -1,9 +1,11 @@
 import express, { Router } from 'express';
-import { webhook } from '../controllers/payment.controller';
+import { createPaymentIntent, webhook } from '../controllers/payment.controller';
 
 const router = Router();
 
-// Stripe exige o corpo bruto para validar a assinatura
+router.post('/create-payment-intent', createPaymentIntent);
+
+// Stripe exige o corpo bruto para validar a assinatura (não passar por express.json)
 router.post('/webhook', express.raw({ type: 'application/json' }), webhook);
 
 export default router;

@@ -40,6 +40,7 @@ services:
       - "5173"
     environment:
       - VITE_API_URL=/api
+      - VITE_STRIPE_PUBLISHABLE_KEY=${VITE_STRIPE_PUBLISHABLE_KEY:-}
     depends_on:
       - backend
     restart: unless-stopped
@@ -54,6 +55,14 @@ services:
       - frontend
       - backend
     restart: unless-stopped
+
+  # Encaminha webhooks da Stripe (modo teste) para o backend. Só sobe com: --profile stripe
+  stripe-cli:
+    image: stripe/stripe-cli:latest
+    profiles: ["stripe"]
+    command: listen --events payment_intent.succeeded,payment_intent.payment_failed --api-key ${STRIPE_SECRET_KEY} --forward-to http://backend:3333/api/payments/webhook
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
