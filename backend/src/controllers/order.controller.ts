@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { z } from 'zod';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import Stripe from 'stripe';
 
-// Configuração do Mercado Pago
-const client = new MercadoPagoConfig({ accessToken: process.env.PAYMENT_ACCESS_TOKEN || 'TEST-token' });
+// Configuração do Stripe
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 
 const orderSchema = z.object({
   items: z.array(z.object({
@@ -95,42 +95,33 @@ export const createOrder = async (req: Request, res: Response) => {
       include: { items: { include: { product: true } } }
     });
 
-    // Integrar com Mercado Pago (Criar Preferência)
-    const preference = new Preference(client);
-    
-    const mpItems = order.items.map(i => ({
-      id: i.productId,
-      title: i.product.name,
+    // Integrar com Stripe (Criar Checkout Session)
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = order.items.map(i => ({
       quantity: i.quantity,
-      unit_price: i.price,
-      currency_id: 'BRL',
+      price_data: {
+        currency: 'brl',
+        unit_amount: Math.round(i.price * 100),
+        product_data: { name: i.product.name },
+      },
     }));
 
-    // Add shipping as an item
-    mpItems.push({
-      id: 'shipping',
-      title: 'Frete Fixo',
+    lineItems.push({
       quantity: 1,
-      unit_price: shippingAmount,
-      currency_id: 'BRL',
+      price_data: {
+        currency: 'brl',
+        unit_amount: Math.round(shippingAmount * 100),
+        product_data: { name: 'Frete Fixo' },
+      },
     });
 
-    const mpResponse = await preference.create({
-      body: {
-        items: mpItems,
-        payer: {
-          name: user.name,
-          email: user.email,
-        },
-        external_reference: order.id,
-        back_urls: {
-          success: `${process.env.FRONTEND_URL}/orders/success`,
-          failure: `${process.env.FRONTEND_URL}/orders/failure`,
-          pending: `${process.env.FRONTEND_URL}/orders/pending`,
-        },
-        auto_return: 'approved',
-        notification_url: `${process.env.BACKEND_URL}/api/payments/webhook`
-      }
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: lineItems,
+      customer_email: user.email,
+      client_reference_id: order.id,
+      metadata: { orderId: order.id },
+      success_url: `${process.env.FRONTEND_URL}/orders/success?orderId=${order.id}`,
+      cancel_url: `${process.env.FRONTEND_URL}/orders/failure?orderId=${order.id}`,
     });
 
     res.status(201).json({
@@ -138,7 +129,7 @@ export const createOrder = async (req: Request, res: Response) => {
       message: 'Pedido criado com sucesso',
       data: {
         orderId: order.id,
-        paymentUrl: mpResponse.init_point
+        paymentUrl: session.url
       }
     });
   } catch (error) {

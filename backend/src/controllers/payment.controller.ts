@@ -1,67 +1,69 @@
 import { Request, Response } from 'express';
+import Stripe from 'stripe';
 import prisma from '../prisma';
-import { Payment } from 'mercadopago';
-import { MercadoPagoConfig } from 'mercadopago';
 
-const client = new MercadoPagoConfig({ accessToken: process.env.PAYMENT_ACCESS_TOKEN || 'TEST-token' });
-const payment = new Payment(client);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 
 export const webhook = async (req: Request, res: Response) => {
+  let event: Stripe.Event;
   try {
-    const { type, data } = req.body;
+    const sig = req.headers['stripe-signature'] as string;
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET || ''
+    );
+  } catch (err) {
+    console.error('Webhook signature error:', err);
+    return res.status(400).send('Invalid signature');
+  }
 
-    if (type === 'payment') {
-      const paymentInfo = await payment.get({ id: data.id });
-      
-      const orderId = paymentInfo.external_reference;
-      const status = paymentInfo.status; // approved, pending, rejected, etc
-
-      if (!orderId) {
-        return res.status(400).send('No external_reference');
-      }
+  try {
+    if (
+      event.type === 'checkout.session.completed' ||
+      event.type === 'checkout.session.async_payment_succeeded' ||
+      event.type === 'checkout.session.async_payment_failed' ||
+      event.type === 'checkout.session.expired'
+    ) {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.client_reference_id || session.metadata?.orderId;
+      if (!orderId) return res.status(400).send('No order reference');
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { items: true }
+        include: { items: true },
       });
+      if (!order) return res.status(404).send('Order not found');
 
-      if (!order) {
-        return res.status(404).send('Order not found');
-      }
-
-      // Evitar processar novamente se já estiver pago
-      if (order.paymentStatus === 'APPROVED' && status === 'approved') {
+      if (order.paymentStatus === 'APPROVED') {
         return res.status(200).send('Already processed');
       }
 
-      let newPaymentStatus: any = 'PENDING';
-      let newOrderStatus: any = order.status;
+      const paymentId = (session.payment_intent as string) || session.id;
 
-      if (status === 'approved') {
-        newPaymentStatus = 'APPROVED';
-        newOrderStatus = 'PAID';
-
-        // Atualizar Estoque
+      if (
+        event.type === 'checkout.session.async_payment_succeeded' ||
+        (event.type === 'checkout.session.completed' && session.payment_status === 'paid')
+      ) {
         for (const item of order.items) {
           await prisma.product.update({
             where: { id: item.productId },
-            data: {
-              stock: { decrement: item.quantity }
-            }
+            data: { stock: { decrement: item.quantity } },
           });
         }
-      } else if (status === 'rejected') {
-        newPaymentStatus = 'REJECTED';
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { paymentStatus: 'APPROVED', status: 'PAID', paymentId },
+        });
+      } else if (
+        event.type === 'checkout.session.async_payment_failed' ||
+        event.type === 'checkout.session.expired'
+      ) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { paymentStatus: 'REJECTED', paymentId },
+        });
       }
-
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          paymentStatus: newPaymentStatus,
-          status: newOrderStatus,
-          paymentId: data.id.toString(),
-        }
-      });
     }
 
     res.status(200).send('OK');

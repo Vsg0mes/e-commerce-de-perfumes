@@ -12,6 +12,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 60s
     restart: unless-stopped
 
   backend:
@@ -23,8 +24,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?schema=public
       - JWT_SECRET=${JWT_SECRET:-supersecret}
       - PORT=3333
-      - PAYMENT_ACCESS_TOKEN=${PAYMENT_ACCESS_TOKEN:-placeholder}
-      - PAYMENT_WEBHOOK_SECRET=${PAYMENT_WEBHOOK_SECRET:-placeholder}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-placeholder}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-placeholder}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
     depends_on:
