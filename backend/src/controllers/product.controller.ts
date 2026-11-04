@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { z } from 'zod';
+import { localizeImageUrl, deleteLocalImage, ImageDownloadError } from '../utils/imageDownloader';
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
@@ -114,9 +115,11 @@ export const createProduct = async (req: Request, res: Response) => {
   try {
     const payload = { ...req.body };
 
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
     if (req.file) {
-      const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-      payload.image = `${backendUrl}/uploads/${req.file.filename}`;
+      payload.image = `/uploads/${req.file.filename}`;
+    } else if (payload.image) {
+      payload.image = await localizeImageUrl(payload.image, backendUrl);
     }
 
     const data = productSchema.parse(payload);
@@ -127,6 +130,9 @@ export const createProduct = async (req: Request, res: Response) => {
 
     res.status(201).json({ success: true, data: product });
   } catch (error) {
+    if (error instanceof ImageDownloadError) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error instanceof z.ZodError) {
       return res.status(400).json({ success: false, message: error.errors[0].message });
     }
@@ -140,20 +146,27 @@ export const updateProduct = async (req: Request, res: Response) => {
     const { id } = req.params;
     const payload = { ...req.body };
 
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
     if (req.file) {
-      const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-      payload.image = `${backendUrl}/uploads/${req.file.filename}`;
+      payload.image = `/uploads/${req.file.filename}`;
+    } else if (payload.image) {
+      payload.image = await localizeImageUrl(payload.image, backendUrl);
     }
 
     const data = productSchema.partial().parse(payload);
+    const previous = data.image ? await prisma.product.findUnique({ where: { id }, select: { image: true } }) : null;
     const product = await prisma.product.update({
       where: { id },
       data,
       include: { brand: true, category: true }
     });
 
+    if (previous?.image && previous.image !== product.image) deleteLocalImage(previous.image);
     res.json({ success: true, data: product });
   } catch (error) {
+    if (error instanceof ImageDownloadError) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error instanceof z.ZodError) {
       return res.status(400).json({ success: false, message: error.errors[0].message });
     }

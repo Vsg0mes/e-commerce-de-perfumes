@@ -28,6 +28,8 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-placeholder}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
+    volumes:
+      - ./backend/uploads:/usr/src/app/uploads
     depends_on:
       postgres:
         condition: service_healthy

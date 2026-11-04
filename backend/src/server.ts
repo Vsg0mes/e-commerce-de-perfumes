@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -47,6 +47,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
+
+// Erros (ex: upload inválido do multer) sempre em JSON
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  const message = err.code === 'LIMIT_FILE_SIZE' ? 'Imagem maior que 5MB.' : err.message || 'Internal server error';
+  res.status(err.status || 400).json({ success: false, message });
+});
 
 // Escuta em 0.0.0.0 para ser acessível a partir de outros containers Docker
 app.listen(Number(port), '0.0.0.0', () => {
