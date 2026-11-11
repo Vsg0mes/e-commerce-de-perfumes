@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { z } from 'zod';
 import Stripe from 'stripe';
+import { AuthRequest } from '../middlewares/auth.middleware';
 
 // Configuração do Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
@@ -26,23 +27,13 @@ const orderSchema = z.object({
   })
 });
 
-export const createOrder = async (req: Request, res: Response) => {
+export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
     const data = orderSchema.parse(req.body);
     
-    // In a real scenario with auth, we'd use req.user.id
-    // For this academic project without forcing login on checkout yet, we create/find a guest user.
-    let user = await prisma.user.findUnique({ where: { email: data.customerInfo.email } });
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: data.customerInfo.name,
-          email: data.customerInfo.email,
-          password: 'guest_password_placeholder', // Should be handled properly in real auth
-          cpf: data.customerInfo.cpf,
-          phone: data.customerInfo.phone,
-        }
-      });
+      return res.status(401).json({ success: false, message: 'Usuário não encontrado. Faça login novamente.' });
     }
 
     const address = await prisma.address.create({

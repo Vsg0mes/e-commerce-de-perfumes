@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Eye, EyeOff, Mail, Lock, Sparkles, Truck, ShieldCheck, Gem } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -13,6 +13,8 @@ export function Login() {
 
   const setAuth = useAuthStore(state => state.setAuth);
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +29,7 @@ export function Login() {
 
       if (res.data.success) {
         setAuth(res.data.data.user, res.data.data.token);
-        navigate('/');
+        navigate(from, { replace: true });
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'E-mail ou senha inválidos');

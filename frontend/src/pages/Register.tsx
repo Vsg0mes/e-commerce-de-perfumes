@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Eye, EyeOff, Mail, Lock, User, Phone, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -18,6 +18,8 @@ export function Register() {
 
   const setAuth = useAuthStore(state => state.setAuth);
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from || '/';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -51,7 +53,7 @@ export function Register() {
 
       if (res.data.success) {
         setAuth(res.data.data.user, res.data.data.token);
-        navigate('/');
+        navigate(from, { replace: true });
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Erro ao criar conta. Tente novamente.');
@@ -232,7 +234,7 @@ export function Register() {
             <div className="mt-6 border-t border-gray-100 pt-6">
               <p className="text-center text-sm text-gray-500">
                 Já tem uma conta?{' '}
-                <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors">
+                <Link to="/login" state={location.state} className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors">
                   Entrar
                 </Link>
               </p>

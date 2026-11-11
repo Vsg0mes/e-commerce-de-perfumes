@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Elements } from '@stripe/react-stripe-js';
+import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { stripePromise, stripeAppearance } from '../lib/stripe';
 import { StripePaymentForm } from '../components/StripePaymentForm';
@@ -9,6 +10,7 @@ import { StripePaymentForm } from '../components/StripePaymentForm';
 export function Checkout() {
   const navigate = useNavigate();
   const { items, getTotal, clearCart } = useCartStore();
+  const { user, token, logout } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [serverAmount, setServerAmount] = useState<number | null>(null);
@@ -16,8 +18,8 @@ export function Checkout() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
+    name: user?.name || '',
+    email: user?.email || '',
     cpf: '',
     phone: '',
     zipCode: '',
@@ -44,7 +46,7 @@ export function Checkout() {
       const res = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:3333/api'}/payments/create-payment-intent`, {
         customerInfo: formData,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity }))
-      });
+      }, { headers: { Authorization: `Bearer ${token}` } });
 
       if (res.data.success) {
         setClientSecret(res.data.data.clientSecret);
@@ -52,6 +54,11 @@ export function Checkout() {
       }
     } catch (error) {
       console.error("Erro ao iniciar pagamento", error);
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        logout();
+        navigate('/login', { state: { from: '/checkout' } });
+        return;
+      }
       setFormError(axios.isAxiosError(error) && error.response?.data?.message
         ? error.response.data.message
         : "Houve um erro ao iniciar o pagamento. Tente novamente.");

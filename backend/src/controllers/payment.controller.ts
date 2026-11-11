@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import Stripe from 'stripe';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { stripe } from '../services/stripe';
+import { AuthRequest } from '../middlewares/auth.middleware';
 
 const SHIPPING_AMOUNT = 20.0; // Frete fixo (mesma regra do pedido)
 
@@ -38,7 +38,7 @@ const toCents = (value: number) => Math.round(value * 100);
  * Recalcula o total no servidor a partir do banco e cria o PaymentIntent.
  * Retorna apenas o client_secret (nenhum dado de cartão passa por aqui).
  */
-export const createPaymentIntent = async (req: Request, res: Response) => {
+export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
   try {
     const data = createIntentSchema.parse(req.body);
 
@@ -69,18 +69,10 @@ export const createPaymentIntent = async (req: Request, res: Response) => {
     const amountCents = subtotalCents + toCents(SHIPPING_AMOUNT);
 
     const c = data.customerInfo;
-    let user = await prisma.user.findUnique({ where: { email: c.email } });
+    // Compra permitida apenas para usuários autenticados (rota protegida por `authenticate`)
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: c.name,
-          email: c.email,
-          // Hash inutilizável: usuário convidado não consegue logar com senha
-          password: `guest:${randomUUID()}`,
-          cpf: c.cpf,
-          phone: c.phone,
-        },
-      });
+      return res.status(401).json({ success: false, message: 'Usuário não encontrado. Faça login novamente.' });
     }
 
     const address = await prisma.address.create({
