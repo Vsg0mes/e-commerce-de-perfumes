@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { z } from 'zod';
 import Stripe from 'stripe';
+import { saveUserAddress, saveUserContact } from '../utils/address';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 // Configuração do Stripe
@@ -21,6 +22,7 @@ const orderSchema = z.object({
     zipCode: z.string(),
     street: z.string(),
     number: z.string(),
+    complement: z.string().optional(),
     neighborhood: z.string(),
     city: z.string(),
     state: z.string(),
@@ -36,17 +38,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Usuário não encontrado. Faça login novamente.' });
     }
 
-    const address = await prisma.address.create({
-      data: {
-        userId: user.id,
-        zipCode: data.customerInfo.zipCode,
-        street: data.customerInfo.street,
-        number: data.customerInfo.number,
-        neighborhood: data.customerInfo.neighborhood,
-        city: data.customerInfo.city,
-        state: data.customerInfo.state,
-      }
-    });
+    const address = await saveUserAddress(user.id, data.customerInfo);
+    await saveUserContact(user.id, data.customerInfo.cpf, data.customerInfo.phone);
 
     let totalAmount = 0;
     const orderItemsData = [];

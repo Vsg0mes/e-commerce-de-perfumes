@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Elements } from '@stripe/react-stripe-js';
@@ -30,6 +30,28 @@ export function Checkout() {
     city: '',
     state: ''
   });
+
+  // Preenche com o endereço/contato salvos na conta do usuário
+  useEffect(() => {
+    if (!token) return;
+    axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3333/api'}/users/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(res => {
+      const me = res.data?.data;
+      if (!me) return;
+      const a = me.address;
+      setFormData(prev => ({
+        ...prev,
+        cpf: prev.cpf || me.cpf || '',
+        phone: prev.phone || me.phone || '',
+        ...(a ? {
+          zipCode: prev.zipCode || a.zipCode, street: prev.street || a.street, number: prev.number || a.number,
+          complement: prev.complement || a.complement || '', neighborhood: prev.neighborhood || a.neighborhood,
+          city: prev.city || a.city, state: prev.state || a.state,
+        } : {}),
+      }));
+    }).catch(() => { /* sem endereço salvo: segue com formulário vazio */ });
+  }, [token]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

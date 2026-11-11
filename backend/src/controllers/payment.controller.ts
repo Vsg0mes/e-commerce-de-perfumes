@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { stripe } from '../services/stripe';
+import { saveUserAddress, saveUserContact } from '../utils/address';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 const SHIPPING_AMOUNT = 20.0; // Frete fixo (mesma regra do pedido)
@@ -25,6 +26,7 @@ const createIntentSchema = z.object({
     zipCode: z.string().min(1),
     street: z.string().min(1),
     number: z.string().min(1),
+    complement: z.string().optional(),
     neighborhood: z.string().min(1),
     city: z.string().min(1),
     state: z.string().min(1),
@@ -75,17 +77,8 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Usuário não encontrado. Faça login novamente.' });
     }
 
-    const address = await prisma.address.create({
-      data: {
-        userId: user.id,
-        zipCode: c.zipCode,
-        street: c.street,
-        number: c.number,
-        neighborhood: c.neighborhood,
-        city: c.city,
-        state: c.state,
-      },
-    });
+    const address = await saveUserAddress(user.id, c);
+    await saveUserContact(user.id, c.cpf, c.phone);
 
     const order = await prisma.order.create({
       data: {
