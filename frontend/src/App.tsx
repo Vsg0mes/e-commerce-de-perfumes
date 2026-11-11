@@ -22,7 +22,7 @@ function App() {
           <Route path="checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
           <Route path="checkout/success" element={<CheckoutSuccess />} />
           <Route path="orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-          <Route path="admin" element={<Admin />} />
+          <Route path="admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
         </Route>

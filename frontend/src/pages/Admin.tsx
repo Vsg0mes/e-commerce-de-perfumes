@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Upload, Image as ImageIcon, X, PlusCircle, Plus, Minus, Pencil, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { AdminOrders } from '../components/admin/AdminOrders';
 
 interface Brand {
   id: string;
@@ -318,6 +319,7 @@ function Accordion({ title, icon, open, onToggle, children }: AccordionProps) {
 
 export function Admin() {
   const { token, user } = useAuthStore();
+  const [tab, setTab] = useState<'products' | 'orders'>('products');
   const [loading, setLoading] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -553,7 +555,7 @@ export function Admin() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className={`${tab === 'orders' ? 'max-w-6xl' : 'max-w-4xl'} mx-auto px-4 sm:px-6 lg:px-8 py-12`}>
       <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200 dark:border-gray-800">
         <div>
           <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100">Painel Administrativo</h1>
@@ -576,6 +578,28 @@ export function Admin() {
         </div>
       )}
 
+      <div className="flex gap-2 mb-6" role="tablist">
+        {([['products', 'Produtos'], ['orders', 'Pedidos']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === key
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'orders' ? (
+        <AdminOrders onMessage={setMessage} />
+      ) : (
+      <>
       <Accordion
         title="Cadastrar Novo Produto"
         icon={<PlusCircle className="text-indigo-600 dark:text-indigo-400" size={24} />}
@@ -662,6 +686,8 @@ export function Admin() {
           </form>
         )}
       </Accordion>
+      </>
+      )}
     </div>
   );
 }
