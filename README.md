@@ -8,7 +8,7 @@ Este projeto acadêmico implementa um e-commerce completo de perfumes.
 - **Backend:** Node.js, Express, TypeScript, Prisma ORM, bcrypt, jsonwebtoken, Helmet.
 - **Banco de Dados:** PostgreSQL.
 - **Infraestrutura:** Docker e Docker Compose.
-- **Pagamentos:** Integração real com o Mercado Pago (SDK Oficial Node.js).
+- **Pagamentos:** Integração real com o Stripe (SDK Oficial Node.js, Checkout Session).
 
 ## Arquitetura
 
@@ -28,7 +28,7 @@ Copie o arquivo de exemplo para gerar suas variáveis de ambiente:
 ```bash
 cp .env.example .env
 ```
-Preencha os valores de `PAYMENT_ACCESS_TOKEN` e `PAYMENT_WEBHOOK_SECRET` com as credenciais do seu painel do Mercado Pago.
+Preencha os valores de `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` com as credenciais do seu painel do Stripe.
 
 ## Como executar (Docker)
 
@@ -68,14 +68,14 @@ Isso criará o esquema do banco de dados e adicionará marcas, categorias, perfu
 - `POST /api/products`: Cria um perfume (Requer ADMIN)
 
 ### Pedidos & Pagamentos
-- `POST /api/orders`: Cria pedido e gera URL de Checkout (Mercado Pago)
+- `POST /api/orders`: Cria pedido e gera URL de Checkout (Stripe)
 - `POST /api/payments/webhook`: Webhook para receber confirmação de pagamento
 
-## Integração de Pagamento (Mercado Pago)
+## Integração de Pagamento (Stripe)
 
-Ao finalizar o carrinho e submeter o checkout, o backend cria um registro de `Order` (PENDING) e chama a API do Mercado Pago para gerar uma preferência de pagamento (`Preference`). A URL é devolvida ao frontend, que redireciona o usuário.
+Ao finalizar o carrinho e submeter o checkout, o backend cria um registro de `Order` (PENDING) e chama a API do Stripe para gerar uma Checkout Session. A URL é devolvida ao frontend, que redireciona o usuário.
 
-Após o pagamento (via PIX, Cartão, etc), o Mercado Pago dispara um POST para a rota `/api/payments/webhook`. O sistema valida, consulta o status real do pagamento, e atualiza o status do `Order` e dá baixa no estoque.
+Após o pagamento (cartão, etc), o Stripe dispara um POST para a rota `/api/payments/webhook`. O sistema valida, consulta o status real do pagamento, e atualiza o status do `Order` e dá baixa no estoque.
 
 ## Decisões Arquiteturais
 

@@ -86,3 +86,6 @@ coverage/
 # ==============================
 test.txt
 *.local
+
+# Imagens enviadas pelos usuários (não versionar)
+backend/uploads/

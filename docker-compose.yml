@@ -12,6 +12,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 60s
     restart: unless-stopped
 
   backend:
@@ -23,10 +24,12 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?schema=public
       - JWT_SECRET=${JWT_SECRET:-supersecret}
       - PORT=3333
-      - PAYMENT_ACCESS_TOKEN=${PAYMENT_ACCESS_TOKEN:-placeholder}
-      - PAYMENT_WEBHOOK_SECRET=${PAYMENT_WEBHOOK_SECRET:-placeholder}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-placeholder}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-placeholder}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
+    volumes:
+      - ./backend/uploads:/usr/src/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,6 +42,7 @@ services:
       - "5173"
     environment:
       - VITE_API_URL=/api
+      - VITE_STRIPE_PUBLISHABLE_KEY=${VITE_STRIPE_PUBLISHABLE_KEY:-}
     depends_on:
       - backend
     restart: unless-stopped
@@ -53,6 +57,14 @@ services:
       - frontend
       - backend
     restart: unless-stopped
+
+  # Encaminha webhooks da Stripe (modo teste) para o backend. Só sobe com: --profile stripe
+  stripe-cli:
+    image: stripe/stripe-cli:latest
+    profiles: ["stripe"]
+    command: listen --events payment_intent.succeeded,payment_intent.payment_failed --api-key ${STRIPE_SECRET_KEY} --forward-to http://backend:3333/api/payments/webhook
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

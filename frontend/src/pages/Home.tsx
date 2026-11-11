@@ -58,7 +58,9 @@ export function Home() {
     setLoading(true);
     try {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = {
+        limit: '100',
+      };
 
       if (searchQuery) params.search = searchQuery;
       if (selectedGender) params.gender = selectedGender;
@@ -117,11 +119,43 @@ export function Home() {
     }
   };
 
-  // Desired products priority order:
+  const sortLabels: Record<string, string> = {
+    price_asc: 'Menor Preço',
+    price_desc: 'Maior Preço',
+    newest: 'Mais recentes',
+  };
+
+  // Desired products priority order when no sort is selected:
   // Sauvage, CH MEN, MYSLF, PRADA PARADOXE, SCANDAL, GOOD GIRL
   const displayedProducts = useMemo(() => {
     if (!products.length) return [];
 
+    // Se o usuário selecionou uma ordenação, respeitamos os critérios de ordenação
+    if (selectedSort === 'price_asc') {
+      return [...products].sort((a: any, b: any) => {
+        const priceA = a.promotionalPrice && Number(a.promotionalPrice) > 0 ? Number(a.promotionalPrice) : Number(a.price) || 0;
+        const priceB = b.promotionalPrice && Number(b.promotionalPrice) > 0 ? Number(b.promotionalPrice) : Number(b.price) || 0;
+        return priceA - priceB;
+      });
+    }
+
+    if (selectedSort === 'price_desc') {
+      return [...products].sort((a: any, b: any) => {
+        const priceA = a.promotionalPrice && Number(a.promotionalPrice) > 0 ? Number(a.promotionalPrice) : Number(a.price) || 0;
+        const priceB = b.promotionalPrice && Number(b.promotionalPrice) > 0 ? Number(b.promotionalPrice) : Number(b.price) || 0;
+        return priceB - priceA;
+      });
+    }
+
+    if (selectedSort === 'newest') {
+      return [...products].sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+    }
+
+    // Se nenhuma ordenação foi selecionada, aplica a ordem de curadoria inicial
     const priorityKeys = ['sauvage', 'ch men', 'myslf', 'paradoxe', 'scandal', 'good girl'];
 
     return [...products].sort((a: any, b: any) => {
@@ -136,7 +170,7 @@ export function Home() {
       if (bIndex !== -1) return 1;
       return 0;
     });
-  }, [products]);
+  }, [products, selectedSort]);
 
   const quickFilterGenders = ['Todos', 'Masculino', 'Feminino', 'Unissex'];
 
@@ -295,7 +329,7 @@ export function Home() {
 
             {selectedSort && (
               <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
-                Ordenação: {selectedSort}
+                Ordenação: {sortLabels[selectedSort] || selectedSort}
                 <button
                   onClick={() => updateFilter('sort', '')}
                   className="hover:text-red-400 ml-1"

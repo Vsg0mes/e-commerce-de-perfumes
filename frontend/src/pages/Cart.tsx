@@ -55,6 +55,7 @@ export function Cart() {
                     {item.image ? (
                       <img
                         src={item.image}
+            referrerPolicy="no-referrer"
                         alt={item.name}
                         className="w-full h-full object-contain"
                       />

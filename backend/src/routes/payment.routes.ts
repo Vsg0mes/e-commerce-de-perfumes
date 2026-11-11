@@ -1,8 +1,12 @@
-import { Router } from 'express';
-import { webhook } from '../controllers/payment.controller';
+import express, { Router } from 'express';
+import { authenticate } from '../middlewares/auth.middleware';
+import { createPaymentIntent, webhook } from '../controllers/payment.controller';
 
 const router = Router();
 
-router.post('/webhook', webhook);
+router.post('/create-payment-intent', authenticate, createPaymentIntent);
+
+// Stripe exige o corpo bruto para validar a assinatura (não passar por express.json)
+router.post('/webhook', express.raw({ type: 'application/json' }), webhook);
 
 export default router;

@@ -94,7 +94,7 @@ model Order {
   paymentStatus PaymentStatus @default(PENDING)
   
   items         OrderItem[]
-  paymentId     String?     // External payment ID from Mercado Pago
+  paymentId     String?     // External payment ID from Stripe
   
   couponId      String?
   coupon        Coupon?     @relation(fields: [couponId], references: [id])

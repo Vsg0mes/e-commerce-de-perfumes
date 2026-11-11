@@ -93,6 +93,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {hasImage ? (
           <img
             src={product.image || ''}
+            referrerPolicy="no-referrer"
             alt={product.name}
             onError={() => setImgError(true)}
             className="w-full h-full object-contain object-center transform group-hover:scale-105 transition-transform duration-700 ease-out"

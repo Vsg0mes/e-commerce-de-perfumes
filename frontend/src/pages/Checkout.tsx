@@ -1,16 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Elements } from '@stripe/react-stripe-js';
+import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
+import { stripePromise, stripeAppearance } from '../lib/stripe';
+import { StripePaymentForm } from '../components/StripePaymentForm';
 
 export function Checkout() {
   const navigate = useNavigate();
   const { items, getTotal, clearCart } = useCartStore();
+  const { user, token, logout } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [serverAmount, setServerAmount] = useState<number | null>(null);
+  const [paid, setPaid] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
+    name: user?.name || '',
+    email: user?.email || '',
     cpf: '',
     phone: '',
     zipCode: '',
@@ -22,36 +31,82 @@ export function Checkout() {
     state: ''
   });
 
+  // Preenche com o endereço/contato salvos na conta do usuário
+  useEffect(() => {
+    if (!token) return;
+    axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3333/api'}/users/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(res => {
+      const me = res.data?.data;
+      if (!me) return;
+      const a = me.address;
+      setFormData(prev => ({
+        ...prev,
+        cpf: prev.cpf || me.cpf || '',
+        phone: prev.phone || me.phone || '',
+        ...(a ? {
+          zipCode: prev.zipCode || a.zipCode, street: prev.street || a.street, number: prev.number || a.number,
+          complement: prev.complement || a.complement || '', neighborhood: prev.neighborhood || a.neighborhood,
+          city: prev.city || a.city, state: prev.state || a.state,
+        } : {}),
+      }));
+    }).catch(() => { /* sem endereço salvo: segue com formulário vazio */ });
+  }, [token]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Etapa 1: envia apenas ids/quantidades + dados do cliente. O valor é calculado no backend.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
-    
+    setFormError(null);
+
     try {
-      const orderData = {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:3333/api'}/payments/create-payment-intent`, {
         customerInfo: formData,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity }))
-      };
-      
-      const res = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:3333/api'}/orders`, orderData);
-      
+      }, { headers: { Authorization: `Bearer ${token}` } });
+
       if (res.data.success) {
-        clearCart();
-        window.location.href = res.data.data.paymentUrl;
+        setClientSecret(res.data.data.clientSecret);
+        setServerAmount(res.data.data.amount);
       }
     } catch (error) {
-      console.error("Erro ao criar pedido", error);
-      alert("Houve um erro ao processar seu pedido. Tente novamente.");
+      console.error("Erro ao iniciar pagamento", error);
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        logout();
+        navigate('/login', { state: { from: '/checkout' } });
+        return;
+      }
+      setFormError(axios.isAxiosError(error) && error.response?.data?.message
+        ? error.response.data.message
+        : "Houve um erro ao iniciar o pagamento. Tente novamente.");
+    } finally {
       setLoading(false);
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    setPaid(true);
+    clearCart();
   };
 
   const formatPrice = (p: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p);
   };
+
+  if (paid) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-24 text-center">
+        <h1 className="text-3xl font-serif text-luxury-gold mb-4">Pagamento recebido!</h1>
+        <p className="text-luxury-textMuted mb-6">Obrigado pela sua compra. Você receberá a confirmação por e-mail.</p>
+        <button onClick={() => navigate('/orders')} className="text-luxury-goldLight underline">Ver meus pedidos</button>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     navigate('/cart');
@@ -67,6 +122,19 @@ export function Checkout() {
 
       <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 lg:items-start">
         <div className="lg:col-span-8">
+          {clientSecret && stripePromise ? (
+            <div className="bg-white dark:bg-luxury-surface p-6 rounded-lg shadow-sm border border-gray-200 dark:border-luxury-border">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Pagamento</h2>
+                <button type="button" onClick={() => setClientSecret(null)} className="text-sm text-luxury-gold hover:underline">
+                  Editar dados
+                </button>
+              </div>
+              <Elements stripe={stripePromise} options={{ clientSecret, appearance: stripeAppearance, locale: 'pt-BR' }}>
+                <StripePaymentForm amountLabel={formatPrice(serverAmount ?? 0)} onSuccess={handlePaymentSuccess} />
+              </Elements>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-8">
             <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Dados Pessoais</h2>
@@ -124,14 +192,19 @@ export function Checkout() {
               </div>
             </div>
 
+            {formError && (
+              <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{formError}</div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
               className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 transition-colors"
             >
-              {loading ? 'Processando...' : 'Ir para o Pagamento'}
+              {loading ? 'Processando...' : 'Continuar para o Pagamento'}
             </button>
           </form>
+          )}
         </div>
 
         <div className="mt-16 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-6 sm:p-6 lg:p-8 lg:mt-0 lg:col-span-4">

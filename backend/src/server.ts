@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import orderRoutes from './routes/order.routes';
 import paymentRoutes from './routes/payment.routes';
+import userRoutes from './routes/user.routes';
 
 const app = express();
 const port = process.env.PORT || 3333;
@@ -31,6 +32,8 @@ app.use(cors({
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
+// Webhook do Stripe precisa do body bruto, antes do express.json
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -45,6 +48,14 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/users', userRoutes);
+
+// Erros (ex: upload inválido do multer) sempre em JSON
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  const message = err.code === 'LIMIT_FILE_SIZE' ? 'Imagem maior que 5MB.' : err.message || 'Internal server error';
+  res.status(err.status || 400).json({ success: false, message });
+});
 
 // Escuta em 0.0.0.0 para ser acessível a partir de outros containers Docker
 app.listen(Number(port), '0.0.0.0', () => {
