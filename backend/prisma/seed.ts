@@ -1,21 +1,44 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import '../src/config/env';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // Admin user
-  const adminPassword = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'admin@ecommerce.com' },
-    update: {},
-    create: {
-      name: 'Admin Memorare',
-      email: 'admin@ecommerce.com',
-      password: adminPassword,
-      role: 'ADMIN',
-    },
-  });
+  // Admin user (credenciais vêm do ambiente; nunca há senha fixa)
+  const isProduction = process.env.NODE_ENV === 'production';
+  const adminEmail = process.env.ADMIN_EMAIL?.trim() || (isProduction ? '' : 'admin@ecommerce.com');
+  if (!adminEmail) {
+    throw new Error('ADMIN_EMAIL é obrigatório em produção. Seed abortado.');
+  }
+
+  const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (existingAdmin) {
+    console.log(`Admin ${adminEmail} já existe; senha mantida.`);
+  } else {
+    let plainPassword = process.env.ADMIN_PASSWORD;
+    let generated = false;
+    if (!plainPassword) {
+      if (isProduction) {
+        throw new Error('ADMIN_PASSWORD é obrigatório em produção. Seed abortado.');
+      }
+      plainPassword = crypto.randomBytes(12).toString('base64url');
+      generated = true;
+    }
+    await prisma.user.create({
+      data: {
+        name: 'Admin Memorare',
+        email: adminEmail,
+        password: await bcrypt.hash(plainPassword, 10),
+        role: 'ADMIN',
+      },
+    });
+    console.log(`Admin ${adminEmail} criado.`);
+    if (generated) {
+      console.log(`Senha gerada (exibida apenas uma vez): ${plainPassword}`);
+    }
+  }
 
   // Brands
   const [dior, chanel, tomFord, ch, ysl, prada, jpg] = await Promise.all([

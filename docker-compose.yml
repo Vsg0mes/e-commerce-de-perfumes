@@ -3,7 +3,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
       POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -21,11 +21,15 @@ services:
     expose:
       - "3333"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?schema=public
-      - JWT_SECRET=${JWT_SECRET:-supersecret}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/${POSTGRES_DB:-ecommerce}?schema=public
+      - JWT_SECRET=${JWT_SECRET:?defina JWT_SECRET no .env}
       - PORT=3333
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-placeholder}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-placeholder}
+      - NODE_ENV=${NODE_ENV:-development}
+      # Usadas apenas pelo seed (npm run prisma:seed)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:?defina STRIPE_SECRET_KEY no .env}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:?defina STRIPE_WEBHOOK_SECRET no .env}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
     volumes:

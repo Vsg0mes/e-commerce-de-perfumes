@@ -1,3 +1,5 @@
+import './config/env';
+import './utils/jwt'; // valida JWT_SECRET na inicialização
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

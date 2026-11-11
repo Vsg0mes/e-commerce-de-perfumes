@@ -28,7 +28,14 @@ Copie o arquivo de exemplo para gerar suas variáveis de ambiente:
 ```bash
 cp .env.example .env
 ```
-Preencha os valores de `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` com as credenciais do seu painel do Stripe.
+Preencha **todas** as variáveis obrigatórias (o `docker compose up` falha com mensagem clara se alguma faltar):
+
+| Variável | Descrição |
+|---|---|
+| `POSTGRES_PASSWORD` | Senha do banco (use a mesma em `DATABASE_URL`) |
+| `JWT_SECRET` | Segredo dos tokens. Gere com `openssl rand -hex 32` (mín. 32 caracteres em produção; valores fracos como `changeme` são rejeitados) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Credenciais do seu painel Stripe (modo teste) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin criado pelo seed. Em produção são obrigatórios; em desenvolvimento, sem `ADMIN_PASSWORD`, uma senha aleatória é gerada e impressa uma única vez |
 
 ## Como executar (Docker)
 
@@ -49,7 +56,7 @@ docker compose exec backend npx prisma migrate dev --name init
 docker compose exec backend npm run prisma:seed
 ```
 
-Isso criará o esquema do banco de dados e adicionará marcas, categorias, perfumes fictícios e um usuário admin (`admin@ecommerce.com` / `admin123`).
+Isso criará o esquema do banco de dados e adicionará marcas, categorias, perfumes fictícios e o usuário admin definido por `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Se o admin já existir, a senha não é sobrescrita.
 
 ## Como acessar
 

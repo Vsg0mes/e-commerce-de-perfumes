@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import prisma from '../prisma';
 import { z } from 'zod';
 import Stripe from 'stripe';
@@ -125,20 +125,28 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const getOrder = async (req: Request, res: Response) => {
+export const getOrder = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { items: { include: { product: true } }, address: true, user: true }
+      include: {
+        items: { include: { product: true } },
+        address: true,
+        user: { select: { id: true, name: true, email: true, phone: true } },
+      },
     });
 
-    if (!order) {
+    // Mesma resposta para "não existe" e "não é seu", evitando enumeração de IDs
+    const isOwner = order?.userId === req.user!.id;
+    const isAdmin = req.user!.role === 'ADMIN';
+    if (!order || (!isOwner && !isAdmin)) {
       return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
     }
 
     res.json({ success: true, data: order });
   } catch (error) {
+    console.error('Error fetching order:', error);
     res.status(500).json({ success: false, message: 'Erro interno no servidor' });
   }
 };
