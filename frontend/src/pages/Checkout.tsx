@@ -16,6 +16,8 @@ export function Checkout() {
   const [serverAmount, setServerAmount] = useState<number | null>(null);
   const [paid, setPaid] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [shipping, setShipping] = useState<{ amount: number; region: string; minDays: number; maxDays: number } | null>(null);
+  const [shippingError, setShippingError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -52,6 +54,25 @@ export function Checkout() {
       }));
     }).catch(() => { /* sem endereço salvo: segue com formulário vazio */ });
   }, [token]);
+
+  // Cotação de frete ao completar o CEP (8 dígitos); o valor final é recalculado no servidor
+  useEffect(() => {
+    const digits = formData.zipCode.replace(/\D/g, '');
+    if (digits.length !== 8) {
+      setShipping(null);
+      setShippingError(null);
+      return;
+    }
+    let cancelled = false;
+    axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3333/api'}/shipping/quote`, { params: { zipCode: digits } })
+      .then(res => { if (!cancelled) { setShipping(res.data.data); setShippingError(null); } })
+      .catch(err => {
+        if (cancelled) return;
+        setShipping(null);
+        setShippingError(axios.isAxiosError(err) && err.response?.data?.message ? err.response.data.message : 'Não foi possível calcular o frete.');
+      });
+    return () => { cancelled = true; };
+  }, [formData.zipCode]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -163,7 +184,8 @@ export function Checkout() {
               <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-6 sm:gap-x-4">
                 <div className="sm:col-span-2">
                   <label className={labelClass}>CEP</label>
-                  <input required type="text" name="zipCode" value={formData.zipCode} onChange={handleChange} className={inputClass} />
+                  <input required type="text" name="zipCode" inputMode="numeric" placeholder="00000-000" maxLength={9} value={formData.zipCode} onChange={handleChange} className={inputClass} />
+                  {shippingError && <p className="mt-1 text-xs text-red-500">{shippingError}</p>}
                 </div>
                 <div className="sm:col-span-4">
                   <label className={labelClass}>Rua</label>
@@ -229,13 +251,18 @@ export function Checkout() {
             </div>
             
             <div className="flex justify-between">
-              <dt>Frete (Fixo)</dt>
-              <dd className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(20.00)}</dd>
+              <dt>
+                Frete{shipping ? ` (${shipping.region})` : ''}
+                {shipping && <span className="block text-xs text-gray-500 dark:text-gray-400">Entrega em {shipping.minDays} a {shipping.maxDays} dias úteis</span>}
+              </dt>
+              <dd className="font-medium text-gray-900 dark:text-gray-100">
+                {shipping ? formatPrice(shipping.amount) : <span className="text-xs">Informe o CEP</span>}
+              </dd>
             </div>
             
             <div className="flex justify-between items-center border-t border-gray-200 dark:border-gray-800 pt-4">
               <dt className="text-base font-medium text-gray-900 dark:text-gray-100">Total a Pagar</dt>
-              <dd className="text-xl font-bold text-gray-900 dark:text-gray-100">{formatPrice(getTotal() + 20.00)}</dd>
+              <dd className="text-xl font-bold text-gray-900 dark:text-gray-100">{shipping ? formatPrice(getTotal() + shipping.amount) : formatPrice(getTotal())}</dd>
             </div>
           </dl>
         </div>

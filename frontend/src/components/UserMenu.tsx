@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, History, LogOut, Package, Shield } from 'lucide-react';
+import { ChevronDown, History, LogOut, Package, Settings, Shield } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 /** Menu suspenso do usuário logado (canto superior direito do Header). */
@@ -70,6 +70,9 @@ export function UserMenu() {
             </Link>
             <Link to="/orders?filter=history" role="menuitem" className={itemClass}>
               <History size={16} /> Histórico de compras
+            </Link>
+            <Link to="/account" role="menuitem" className={itemClass}>
+              <Settings size={16} /> Configurações
             </Link>
             {user.role === 'ADMIN' && (
               <Link to="/admin" role="menuitem" className={itemClass}>

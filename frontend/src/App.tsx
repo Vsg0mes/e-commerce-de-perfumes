@@ -6,6 +6,7 @@ import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { CheckoutSuccess } from './pages/CheckoutSuccess';
 import { Orders } from './pages/Orders';
+import { Account } from './pages/Account';
 import { Admin } from './pages/Admin';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -22,6 +23,7 @@ function App() {
           <Route path="checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
           <Route path="checkout/success" element={<CheckoutSuccess />} />
           <Route path="orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
           <Route path="admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />

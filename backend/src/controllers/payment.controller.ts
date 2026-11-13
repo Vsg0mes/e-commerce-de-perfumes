@@ -5,8 +5,8 @@ import prisma from '../prisma';
 import { stripe } from '../services/stripe';
 import { saveUserAddress, saveUserContact } from '../utils/address';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { calculateShipping } from '../utils/shipping';
 
-const SHIPPING_AMOUNT = 20.0; // Frete fixo (mesma regra do pedido)
 
 // Apenas ids e quantidades são aceitos do cliente. NUNCA preço/total.
 const createIntentSchema = z.object({
@@ -68,7 +68,12 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
       subtotalCents += toCents(unitPrice) * quantity;
       orderItems.push({ productId: product.id, quantity, price: unitPrice });
     }
-    const amountCents = subtotalCents + toCents(SHIPPING_AMOUNT);
+    // Frete calculado no servidor a partir do CEP (nunca aceito do cliente)
+    const shipping = calculateShipping(data.customerInfo.zipCode);
+    if (!shipping) {
+      return res.status(400).json({ success: false, message: 'CEP inválido ou fora da área de entrega' });
+    }
+    const amountCents = subtotalCents + toCents(shipping.amount);
 
     const c = data.customerInfo;
     // Compra permitida apenas para usuários autenticados (rota protegida por `authenticate`)
@@ -85,7 +90,7 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
         userId: user.id,
         addressId: address.id,
         totalAmount: amountCents / 100,
-        shippingAmount: SHIPPING_AMOUNT,
+        shippingAmount: shipping.amount,
         items: { create: orderItems },
       },
     });

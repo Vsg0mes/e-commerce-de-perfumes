@@ -136,7 +136,7 @@ export function Cart() {
 
               <div className="flex justify-between">
                 <dt>Frete Especial Segurado</dt>
-                <dd className="font-medium text-[#D4AF37]">Cortesia Memorare</dd>
+                <dd className="font-medium text-[#D4AF37]">Calculado no checkout pelo CEP</dd>
               </div>
 
               <div className="flex justify-between items-center border-t border-[#1f1f23] pt-4">
