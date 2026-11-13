@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ShoppingBag, Search, User, LogOut, Shield, Sun, Moon, X } from 'lucide-react';
+import { ShoppingBag, Search, User, Sun, Moon, X } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
+import { UserMenu } from './UserMenu';
 
 export function Header() {
   const items = useCartStore(state => state.items);
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const { isDark, toggleTheme } = useThemeStore();
   const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
 
@@ -135,25 +136,7 @@ export function Header() {
 
               {/* User Account */}
               {user ? (
-                <div className="flex items-center space-x-3">
-                  {user.role === 'ADMIN' && (
-                    <Link 
-                      to="/admin" 
-                      className="text-gray-400 hover:text-[#D4AF37] flex items-center gap-1.5 text-xs tracking-wider uppercase"
-                    >
-                      <Shield size={16} className="text-[#D4AF37]" />
-                      <span className="hidden sm:inline">Admin</span>
-                    </Link>
-                  )}
-                  <span className="text-xs text-gray-300 tracking-wider hidden sm:inline">{user.name}</span>
-                  <button 
-                    onClick={logout} 
-                    className="text-gray-400 hover:text-red-400 p-1.5 transition-colors" 
-                    title="Sair"
-                  >
-                    <LogOut size={18} />
-                  </button>
-                </div>
+                <UserMenu />
               ) : (
                 <Link 
                   to="/login" 

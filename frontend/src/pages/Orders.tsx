@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Package, AlertCircle, Truck } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -20,6 +20,9 @@ const PAGE_SIZE = 10;
 
 export function Orders() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // ?filter=history mostra apenas pedidos concluídos (entregues/cancelados)
+  const historyOnly = searchParams.get('filter') === 'history';
   const { token, logout } = useAuthStore();
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -63,11 +66,13 @@ export function Orders() {
     setLoadingMore(false);
   };
 
+  const visible = historyOnly ? orders.filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED') : orders;
+
   if (loading) return <div className="p-12 text-center text-gray-500 dark:text-gray-400">Carregando...</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100 mb-8">Meus Pedidos</h1>
+      <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100 mb-8">{historyOnly ? 'Histórico de compras' : 'Meus Pedidos'}</h1>
 
       {error && orders.length === 0 ? (
         <div role="alert" className="text-center py-16 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
@@ -77,15 +82,15 @@ export function Orders() {
             Tentar de novo
           </button>
         </div>
-      ) : orders.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="text-center py-24 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
           <Package className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Nenhum pedido encontrado</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Você ainda não realizou nenhuma compra.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{historyOnly ? 'Nenhuma compra concluída até agora.' : 'Você ainda não realizou nenhuma compra.'}</p>
         </div>
       ) : (
         <div className="space-y-6">
-          {orders.map(order => {
+          {visible.map(order => {
             const subtotal = order.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
             return (
               <div key={order.id} className="bg-white dark:bg-gray-900 shadow-sm overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
