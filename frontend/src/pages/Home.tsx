@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { ProductCard } from '../components/ProductCard';
@@ -8,6 +8,7 @@ import { NossaEssencia } from '../components/NossaEssencia';
 import { TestimonialsSection } from '../components/TestimonialsSection';
 import { CtaSection } from '../components/CtaSection';
 import { Filter, X, Search, SlidersHorizontal, Sparkles } from 'lucide-react';
+import type { Pagination } from '../lib/orderStatus';
 
 interface Brand {
   id: string;
@@ -19,58 +20,87 @@ interface Category {
   name: string;
 }
 
+const PAGE_LIMIT = 9;
+
 export function Home() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<any[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: PAGE_LIMIT,
+    total: 0,
+    totalPages: 1,
+  });
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [olfactoryFamilies, setOlfactoryFamilies] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Active filter state synced with URL search params
+  // Filtros sincronizados na URL
   const searchQuery = searchParams.get('search') || '';
   const selectedGender = searchParams.get('gender') || '';
   const selectedBrand = searchParams.get('brand') || '';
   const selectedCategory = searchParams.get('category') || '';
+  const selectedFamily = searchParams.get('olfactoryFamily') || '';
+  const minPriceParam = searchParams.get('minPrice') || '';
+  const maxPriceParam = searchParams.get('maxPrice') || '';
   const selectedSort = searchParams.get('sort') || '';
+  const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
-  // Load brands and categories on mount
+  const [minPriceInput, setMinPriceInput] = useState(minPriceParam);
+  const [maxPriceInput, setMaxPriceInput] = useState(maxPriceParam);
+
+  useEffect(() => {
+    setMinPriceInput(minPriceParam);
+    setMaxPriceInput(maxPriceParam);
+  }, [minPriceParam, maxPriceParam]);
+
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
         const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
-        const [brandsRes, catRes] = await Promise.all([
+        const [brandsRes, catRes, famRes] = await Promise.all([
           axios.get(`${apiBase}/products/brands`),
           axios.get(`${apiBase}/products/categories`),
+          axios.get(`${apiBase}/products/olfactory-families`),
         ]);
         if (brandsRes.data?.success) setBrands(brandsRes.data.data);
         if (catRes.data?.success) setCategories(catRes.data.data);
+        if (famRes.data?.success) setOlfactoryFamilies(famRes.data.data);
       } catch (err) {
-        console.error('Erro ao carregar marcas/categorias:', err);
+        console.error('Erro ao carregar metadados do catálogo:', err);
       }
     };
 
     fetchMetadata();
   }, []);
 
-  // Fetch products when filters or search change
+  // Busca paginada e ordenada diretamente na API
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
       const params: Record<string, string> = {
-        limit: '100',
+        page: String(currentPage),
+        limit: String(PAGE_LIMIT),
       };
 
       if (searchQuery) params.search = searchQuery;
       if (selectedGender) params.gender = selectedGender;
       if (selectedBrand) params.brand = selectedBrand;
       if (selectedCategory) params.category = selectedCategory;
+      if (selectedFamily) params.olfactoryFamily = selectedFamily;
+      if (minPriceParam) params.minPrice = minPriceParam;
+      if (maxPriceParam) params.maxPrice = maxPriceParam;
       if (selectedSort) params.sort = selectedSort;
 
       const res = await axios.get(`${apiBase}/products`, { params });
       if (res.data?.success) {
         setProducts(res.data.data || []);
+        if (res.data.pagination) {
+          setPagination(res.data.pagination);
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
@@ -78,13 +108,22 @@ export function Home() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedGender, selectedBrand, selectedCategory, selectedSort]);
+  }, [
+    currentPage,
+    searchQuery,
+    selectedGender,
+    selectedBrand,
+    selectedCategory,
+    selectedFamily,
+    minPriceParam,
+    maxPriceParam,
+    selectedSort,
+  ]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Update a single filter in searchParams
   const updateFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams);
     if (value) {
@@ -92,31 +131,46 @@ export function Home() {
     } else {
       newParams.delete(key);
     }
+    if (key !== 'page') {
+      newParams.delete('page');
+    }
     setSearchParams(newParams);
   };
 
-  // Clear all filters
+  const applyPriceRange = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newParams = new URLSearchParams(searchParams);
+    if (minPriceInput.trim()) newParams.set('minPrice', minPriceInput.trim());
+    else newParams.delete('minPrice');
+    if (maxPriceInput.trim()) newParams.set('maxPrice', maxPriceInput.trim());
+    else newParams.delete('maxPrice');
+    newParams.delete('page');
+    setSearchParams(newParams);
+  };
+
   const clearFilters = () => {
     setSearchParams(new URLSearchParams());
   };
 
   const hasActiveFilters = Boolean(
-    searchQuery || selectedGender || selectedBrand || selectedCategory || selectedSort
+    searchQuery ||
+      selectedGender ||
+      selectedBrand ||
+      selectedCategory ||
+      selectedFamily ||
+      minPriceParam ||
+      maxPriceParam ||
+      selectedSort
   );
 
-  // Smooth scroll helpers
   const scrollToCollection = () => {
     const target = document.getElementById('colecao');
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
   };
 
   const scrollToEssence = () => {
     const target = document.getElementById('essencia');
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
   };
 
   const sortLabels: Record<string, string> = {
@@ -125,67 +179,15 @@ export function Home() {
     newest: 'Mais recentes',
   };
 
-  // Desired products priority order when no sort is selected:
-  // Sauvage, CH MEN, MYSLF, PRADA PARADOXE, SCANDAL, GOOD GIRL
-  const displayedProducts = useMemo(() => {
-    if (!products.length) return [];
-
-    // Se o usuário selecionou uma ordenação, respeitamos os critérios de ordenação
-    if (selectedSort === 'price_asc') {
-      return [...products].sort((a: any, b: any) => {
-        const priceA = a.promotionalPrice && Number(a.promotionalPrice) > 0 ? Number(a.promotionalPrice) : Number(a.price) || 0;
-        const priceB = b.promotionalPrice && Number(b.promotionalPrice) > 0 ? Number(b.promotionalPrice) : Number(b.price) || 0;
-        return priceA - priceB;
-      });
-    }
-
-    if (selectedSort === 'price_desc') {
-      return [...products].sort((a: any, b: any) => {
-        const priceA = a.promotionalPrice && Number(a.promotionalPrice) > 0 ? Number(a.promotionalPrice) : Number(a.price) || 0;
-        const priceB = b.promotionalPrice && Number(b.promotionalPrice) > 0 ? Number(b.promotionalPrice) : Number(b.price) || 0;
-        return priceB - priceA;
-      });
-    }
-
-    if (selectedSort === 'newest') {
-      return [...products].sort((a: any, b: any) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
-    }
-
-    // Se nenhuma ordenação foi selecionada, aplica a ordem de curadoria inicial
-    const priorityKeys = ['sauvage', 'ch men', 'myslf', 'paradoxe', 'scandal', 'good girl'];
-
-    return [...products].sort((a: any, b: any) => {
-      const aName = (a.name || '').toLowerCase();
-      const bName = (b.name || '').toLowerCase();
-
-      const aIndex = priorityKeys.findIndex((key) => aName.includes(key));
-      const bIndex = priorityKeys.findIndex((key) => bName.includes(key));
-
-      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-      if (aIndex !== -1) return -1;
-      if (bIndex !== -1) return 1;
-      return 0;
-    });
-  }, [products, selectedSort]);
-
   const quickFilterGenders = ['Todos', 'Masculino', 'Feminino', 'Unissex'];
 
   return (
     <div className="bg-[#080808] text-gray-100 min-h-screen">
-      {/* 1. HERO SECTION (100vh) */}
       <HeroSection onExploreClick={scrollToCollection} onBrandClick={scrollToEssence} />
 
-      {/* 2. DIFFERENTIALS BAR */}
       <DifferentialsBar />
 
-      {/* 3. COLEÇÃO EXCLUSIVA (Products, Quick Filters & Sidebar Filters) */}
       <section id="colecao" className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        
-        {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#D4AF37]/25 bg-[#121214]/80 backdrop-blur-md mb-4">
             <Sparkles size={12} className="text-[#D4AF37]" />
@@ -205,8 +207,7 @@ export function Home() {
         {/* Quick Gender Filter Pills Bar */}
         <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-4 mb-10">
           {quickFilterGenders.map((item) => {
-            const isSelected =
-              item === 'Todos' ? selectedGender === '' : selectedGender === item;
+            const isSelected = item === 'Todos' ? selectedGender === '' : selectedGender === item;
             return (
               <button
                 key={item}
@@ -230,24 +231,21 @@ export function Home() {
               {searchQuery ? `Resultados para "${searchQuery}"` : 'Catálogo Disponível'}
             </h3>
             <p className="text-xs text-gray-400 mt-1 font-light">
-              {products.length} {products.length === 1 ? 'fragrância encontrada' : 'fragrâncias encontradas'}
+              {pagination.total}{' '}
+              {pagination.total === 1 ? 'fragrância encontrada' : 'fragrâncias encontradas'}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Mobile Filter Toggle Button */}
             <button
               onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
               className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#121214] border border-[#27272a] text-xs uppercase tracking-wider text-gray-200 hover:border-[#D4AF37]/50"
             >
               <SlidersHorizontal size={14} className="text-[#D4AF37]" />
               <span>Filtros</span>
-              {hasActiveFilters && (
-                <span className="w-2 h-2 rounded-full bg-[#D4AF37]" />
-              )}
+              {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-[#D4AF37]" />}
             </button>
 
-            {/* Sort Select */}
             <div className="relative">
               <select
                 value={selectedSort}
@@ -278,11 +276,7 @@ export function Home() {
             {searchQuery && (
               <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
                 <Search size={12} className="text-[#D4AF37]" /> "{searchQuery}"
-                <button
-                  onClick={() => updateFilter('search', '')}
-                  className="hover:text-red-400 ml-1"
-                  aria-label="Remover busca"
-                >
+                <button onClick={() => updateFilter('search', '')} className="hover:text-red-400 ml-1">
                   <X size={13} />
                 </button>
               </span>
@@ -291,11 +285,7 @@ export function Home() {
             {selectedGender && (
               <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
                 Gênero: {selectedGender}
-                <button
-                  onClick={() => updateFilter('gender', '')}
-                  className="hover:text-red-400 ml-1"
-                  aria-label="Remover filtro de gênero"
-                >
+                <button onClick={() => updateFilter('gender', '')} className="hover:text-red-400 ml-1">
                   <X size={13} />
                 </button>
               </span>
@@ -304,11 +294,7 @@ export function Home() {
             {selectedBrand && (
               <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
                 Marca: {selectedBrand}
-                <button
-                  onClick={() => updateFilter('brand', '')}
-                  className="hover:text-red-400 ml-1"
-                  aria-label="Remover filtro de marca"
-                >
+                <button onClick={() => updateFilter('brand', '')} className="hover:text-red-400 ml-1">
                   <X size={13} />
                 </button>
               </span>
@@ -317,10 +303,37 @@ export function Home() {
             {selectedCategory && (
               <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
                 Categoria: {selectedCategory}
+                <button onClick={() => updateFilter('category', '')} className="hover:text-red-400 ml-1">
+                  <X size={13} />
+                </button>
+              </span>
+            )}
+
+            {selectedFamily && (
+              <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
+                Família: {selectedFamily}
                 <button
-                  onClick={() => updateFilter('category', '')}
+                  onClick={() => updateFilter('olfactoryFamily', '')}
                   className="hover:text-red-400 ml-1"
-                  aria-label="Remover filtro de categoria"
+                >
+                  <X size={13} />
+                </button>
+              </span>
+            )}
+
+            {(minPriceParam || maxPriceParam) && (
+              <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
+                Preço: {minPriceParam ? `R$ ${minPriceParam}` : 'R$ 0'} –{' '}
+                {maxPriceParam ? `R$ ${maxPriceParam}` : 'máx'}
+                <button
+                  onClick={() => {
+                    const p = new URLSearchParams(searchParams);
+                    p.delete('minPrice');
+                    p.delete('maxPrice');
+                    p.delete('page');
+                    setSearchParams(p);
+                  }}
+                  className="hover:text-red-400 ml-1"
                 >
                   <X size={13} />
                 </button>
@@ -330,11 +343,7 @@ export function Home() {
             {selectedSort && (
               <span className="inline-flex items-center gap-1.5 text-xs bg-[#1a1a1e] text-gray-200 px-3 py-1 rounded-full border border-[#333338]">
                 Ordenação: {sortLabels[selectedSort] || selectedSort}
-                <button
-                  onClick={() => updateFilter('sort', '')}
-                  className="hover:text-red-400 ml-1"
-                  aria-label="Remover ordenação"
-                >
+                <button onClick={() => updateFilter('sort', '')} className="hover:text-red-400 ml-1">
                   <X size={13} />
                 </button>
               </span>
@@ -349,9 +358,9 @@ export function Home() {
           </div>
         )}
 
-        {/* Mobile Filter Drawer / Modal */}
+        {/* Mobile Filter Drawer */}
         {isMobileFilterOpen && (
-          <div className="lg:hidden mb-8 p-6 bg-[#121214] rounded-2xl border border-[#27272a] shadow-xl animate-in fade-in duration-300">
+          <div className="lg:hidden mb-8 p-6 bg-[#121214] rounded-2xl border border-[#27272a] shadow-xl">
             <div className="flex items-center justify-between border-b border-[#222226] pb-4 mb-4">
               <span className="font-cinzel text-sm uppercase tracking-wider text-white font-medium flex items-center gap-2">
                 <Filter size={16} className="text-[#D4AF37]" />
@@ -366,10 +375,11 @@ export function Home() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* Brand Filter */}
               <div>
-                <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">Marca</h4>
-                <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
+                  Marca
+                </h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                   <label className="flex items-center cursor-pointer text-xs text-gray-300">
                     <input
                       type="radio"
@@ -395,11 +405,12 @@ export function Home() {
                 </div>
               </div>
 
-              {/* Category Filter */}
               {categories.length > 0 && (
                 <div>
-                  <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">Categoria</h4>
-                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                  <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
+                    Categoria
+                  </h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                     <label className="flex items-center cursor-pointer text-xs text-gray-300">
                       <input
                         type="radio"
@@ -411,7 +422,10 @@ export function Home() {
                       <span className="ml-2">Todas</span>
                     </label>
                     {categories.map((c) => (
-                      <label key={c.id} className="flex items-center cursor-pointer text-xs text-gray-300">
+                      <label
+                        key={c.id}
+                        className="flex items-center cursor-pointer text-xs text-gray-300"
+                      >
                         <input
                           type="radio"
                           name="m-category"
@@ -425,6 +439,70 @@ export function Home() {
                   </div>
                 </div>
               )}
+
+              {olfactoryFamilies.length > 0 && (
+                <div>
+                  <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
+                    Família Olfativa
+                  </h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    <label className="flex items-center cursor-pointer text-xs text-gray-300">
+                      <input
+                        type="radio"
+                        name="m-family"
+                        checked={selectedFamily === ''}
+                        onChange={() => updateFilter('olfactoryFamily', '')}
+                        className="accent-[#D4AF37]"
+                      />
+                      <span className="ml-2">Todas</span>
+                    </label>
+                    {olfactoryFamilies.map((fam) => (
+                      <label key={fam} className="flex items-center cursor-pointer text-xs text-gray-300">
+                        <input
+                          type="radio"
+                          name="m-family"
+                          checked={selectedFamily === fam}
+                          onChange={() => updateFilter('olfactoryFamily', fam)}
+                          className="accent-[#D4AF37]"
+                        />
+                        <span className="ml-2">{fam}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
+                  Faixa de Preço (R$)
+                </h4>
+                <form onSubmit={applyPriceRange} className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Mín"
+                      value={minPriceInput}
+                      onChange={(e) => setMinPriceInput(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg bg-[#18181c] border border-[#2c2c32] text-xs text-white"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Máx"
+                      value={maxPriceInput}
+                      onChange={(e) => setMaxPriceInput(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg bg-[#18181c] border border-[#2c2c32] text-xs text-white"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-1.5 rounded-lg bg-[#27272a] hover:bg-[#D4AF37] hover:text-[#080808] text-xs font-medium text-gray-200 transition-colors"
+                  >
+                    Aplicar preço
+                  </button>
+                </form>
+              </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-[#222226] flex justify-end gap-3">
@@ -465,6 +543,39 @@ export function Home() {
                 )}
               </div>
 
+              {/* Faixa de Preço */}
+              <div>
+                <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
+                  Faixa de Preço (R$)
+                </h4>
+                <form onSubmit={applyPriceRange} className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Mín"
+                      value={minPriceInput}
+                      onChange={(e) => setMinPriceInput(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#18181c] border border-[#2c2c32] text-xs text-white focus:border-[#D4AF37] focus:outline-none"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Máx"
+                      value={maxPriceInput}
+                      onChange={(e) => setMaxPriceInput(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#18181c] border border-[#2c2c32] text-xs text-white focus:border-[#D4AF37] focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-2 rounded-lg bg-[#1f1f23] hover:bg-[#D4AF37] hover:text-[#080808] text-xs font-medium text-gray-200 transition-colors"
+                  >
+                    Filtrar preço
+                  </button>
+                </form>
+              </div>
+
               {/* Gênero */}
               <div>
                 <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
@@ -498,6 +609,42 @@ export function Home() {
                   ))}
                 </div>
               </div>
+
+              {/* Família Olfativa */}
+              {olfactoryFamilies.length > 0 && (
+                <div>
+                  <h4 className="font-cinzel text-xs text-[#D4AF37] uppercase tracking-widest mb-3">
+                    Família Olfativa
+                  </h4>
+                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    <label className="flex items-center cursor-pointer text-xs text-gray-300 hover:text-white transition-colors">
+                      <input
+                        type="radio"
+                        name="sidebar-family"
+                        checked={selectedFamily === ''}
+                        onChange={() => updateFilter('olfactoryFamily', '')}
+                        className="accent-[#D4AF37]"
+                      />
+                      <span className="ml-2.5">Todas</span>
+                    </label>
+                    {olfactoryFamilies.map((fam) => (
+                      <label
+                        key={fam}
+                        className="flex items-center cursor-pointer text-xs text-gray-300 hover:text-white transition-colors"
+                      >
+                        <input
+                          type="radio"
+                          name="sidebar-family"
+                          checked={selectedFamily === fam}
+                          onChange={() => updateFilter('olfactoryFamily', fam)}
+                          className="accent-[#D4AF37]"
+                        />
+                        <span className="ml-2.5">{fam}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Marca */}
               <div>
@@ -589,12 +736,49 @@ export function Home() {
                   </div>
                 ))}
               </div>
-            ) : displayedProducts.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-                {displayedProducts.map((product: any) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+            ) : products.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                  {products.map((product: any) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+
+                {pagination.totalPages > 1 && (
+                  <div className="mt-12 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => updateFilter('page', String(currentPage - 1))}
+                      className="px-4 py-2 rounded-full border border-[#27272a] bg-[#121214] text-xs uppercase tracking-wider text-gray-300 hover:border-[#D4AF37] disabled:opacity-40 transition-colors"
+                    >
+                      Anterior
+                    </button>
+                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((pg) => (
+                      <button
+                        key={pg}
+                        type="button"
+                        onClick={() => updateFilter('page', String(pg))}
+                        className={`w-9 h-9 rounded-full text-xs font-semibold transition-colors ${
+                          pg === currentPage
+                            ? 'bg-[#D4AF37] text-[#080808]'
+                            : 'bg-[#121214] border border-[#27272a] text-gray-300 hover:border-[#D4AF37]'
+                        }`}
+                      >
+                        {pg}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={currentPage >= pagination.totalPages}
+                      onClick={() => updateFilter('page', String(currentPage + 1))}
+                      className="px-4 py-2 rounded-full border border-[#27272a] bg-[#121214] text-xs uppercase tracking-wider text-gray-300 hover:border-[#D4AF37] disabled:opacity-40 transition-colors"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-20 bg-[#121214] rounded-2xl border border-[#222226] p-8 max-w-lg mx-auto">
                 <Search className="mx-auto h-12 w-12 text-[#D4AF37]/50 mb-4" />
@@ -618,13 +802,8 @@ export function Home() {
         </div>
       </section>
 
-      {/* 4. NOSSA ESSÊNCIA SECTION */}
       <NossaEssencia />
-
-      {/* 5. EXPERIÊNCIA / DEPOIMENTOS SECTION */}
       <TestimonialsSection />
-
-      {/* 6. CTA FINAL SECTION */}
       <CtaSection onShopClick={scrollToCollection} />
     </div>
   );
