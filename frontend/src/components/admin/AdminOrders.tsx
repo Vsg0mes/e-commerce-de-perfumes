@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { ChevronDown, ChevronRight, Search, Truck } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw, Search, Truck } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import {
   ADMIN_TRANSITIONS,
@@ -95,12 +95,42 @@ export function AdminOrders({ onMessage }: Props) {
     }
   };
 
+  const handleRefund = async (order: OrderData) => {
+    if (updating === order.id) return;
+    const confirmed = window.confirm(
+      `${shortOrderId(order.id)}: Cancelar pedido e reembolsar o valor total de ${formatBRL(order.totalAmount)} ao cliente? Esta ação é irreversível.`
+    );
+    if (!confirmed) return;
+
+    setUpdating(order.id);
+    try {
+      const res = await axios.post(`${apiBase}/orders/${order.id}/refund`, {}, { headers });
+      setOrders(prev => prev.map(o => (o.id === order.id ? res.data.data : o)));
+      onMessage({
+        type: 'success',
+        text: `Pedido ${shortOrderId(order.id)} cancelado e reembolsado (${formatBRL(order.totalAmount)}).`,
+      });
+    } catch (err) {
+      onMessage({
+        type: 'error',
+        text: (axios.isAxiosError(err) && err.response?.data?.message) || 'Erro ao reembolsar pedido.',
+      });
+      load();
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   const handleSelect = (order: OrderData, next: OrderStatus | '') => {
     if (!next) return;
     if (next === 'SHIPPED') {
       setShippingFor(order.id);
       setTrackingCode('');
       setExpanded(order.id);
+      return;
+    }
+    if (next === 'CANCELLED' && (order.status === 'PAID' || order.status === 'PROCESSING')) {
+      handleRefund(order);
       return;
     }
     const confirmText = CONFIRM_TEXT[next];
@@ -154,7 +184,7 @@ export function AdminOrders({ onMessage }: Props) {
               <th className="px-4 py-3 text-right">Total</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Pagamento</th>
-              <th className="px-4 py-3">Alterar status</th>
+              <th className="px-4 py-3">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
@@ -167,6 +197,7 @@ export function AdminOrders({ onMessage }: Props) {
             {orders.map(order => {
               const isOpen = expanded === order.id;
               const options = ADMIN_TRANSITIONS[order.status];
+              const canRefund = order.status === 'PAID' || order.status === 'PROCESSING';
               return (
                 <Fragment key={order.id}>
                   <tr className={loading ? 'opacity-60' : ''}>
@@ -182,22 +213,49 @@ export function AdminOrders({ onMessage }: Props) {
                       <div className="text-xs text-gray-500 dark:text-gray-400">{order.user?.email}</div>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">{formatBRL(order.totalAmount)}</td>
-                    <td className="px-4 py-3"><span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ORDER_STATUS_COLOR[order.status]}`}>{ORDER_STATUS_LABEL[order.status]}</span></td>
-                    <td className="px-4 py-3"><span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${PAYMENT_STATUS_COLOR[order.paymentStatus]}`}>{PAYMENT_STATUS_LABEL[order.paymentStatus]}</span></td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ORDER_STATUS_COLOR[order.status]}`}>
+                        {ORDER_STATUS_LABEL[order.status]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${PAYMENT_STATUS_COLOR[order.paymentStatus]}`}>
+                        {PAYMENT_STATUS_LABEL[order.paymentStatus]}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       {options.length === 0 ? (
-                        <span className="text-xs text-gray-400">Estado final</span>
+                        <span className="text-xs text-gray-400">
+                          {order.paymentStatus === 'REFUNDED' ? 'Cancelado e reembolsado' : 'Estado final'}
+                        </span>
                       ) : (
-                        <select
-                          value=""
-                          disabled={updating === order.id}
-                          onChange={e => handleSelect(order, e.target.value as OrderStatus | '')}
-                          className={fieldClass}
-                          aria-label={`Alterar status do pedido ${shortOrderId(order.id)}`}
-                        >
-                          <option value="">Alterar para…</option>
-                          {options.map(s => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
-                        </select>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value=""
+                            disabled={updating === order.id}
+                            onChange={e => handleSelect(order, e.target.value as OrderStatus | '')}
+                            className={fieldClass}
+                            aria-label={`Alterar status do pedido ${shortOrderId(order.id)}`}
+                          >
+                            <option value="">Alterar para…</option>
+                            {options.map(s => (
+                              <option key={s} value={s}>
+                                {s === 'CANCELLED' && canRefund ? 'Cancelar e reembolsar' : ORDER_STATUS_LABEL[s]}
+                              </option>
+                            ))}
+                          </select>
+                          {canRefund && (
+                            <button
+                              type="button"
+                              disabled={updating === order.id}
+                              onClick={() => handleRefund(order)}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+                            >
+                              <RotateCcw size={14} />
+                              Cancelar e reembolsar
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -248,6 +306,11 @@ export function AdminOrders({ onMessage }: Props) {
                             {order.shippedAt && <p>Enviado em {formatDate(order.shippedAt)}</p>}
                             {order.deliveredAt && <p>Entregue em {formatDate(order.deliveredAt)}</p>}
                             {order.cancelledAt && <p>Cancelado em {formatDate(order.cancelledAt)}</p>}
+                            {order.paymentStatus === 'REFUNDED' && (
+                              <p className="text-purple-700 dark:text-purple-300 font-medium">
+                                Reembolso integral processado ({formatBRL(order.totalAmount)})
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>

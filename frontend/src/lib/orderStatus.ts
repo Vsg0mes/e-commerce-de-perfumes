@@ -42,8 +42,8 @@ export const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
 /** Transições que o admin pode fazer (espelha o backend). PAID só vem do webhook do Stripe. */
 export const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ['CANCELLED'],
-  PAID: ['PROCESSING'],
-  PROCESSING: ['SHIPPED'],
+  PAID: ['PROCESSING', 'CANCELLED'],
+  PROCESSING: ['SHIPPED', 'CANCELLED'],
   SHIPPED: ['DELIVERED'],
   DELIVERED: [],
   CANCELLED: [],
@@ -87,6 +87,8 @@ export interface OrderData {
   shippedAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
+  expiresAt?: string | null;
+  needsManualReview?: boolean;
   items: OrderItemData[];
   address: OrderAddress;
   user?: { id: string; name: string; email: string; phone: string | null };
