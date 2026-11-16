@@ -10,6 +10,7 @@ import orderRoutes from './routes/order.routes';
 import paymentRoutes from './routes/payment.routes';
 import userRoutes from './routes/user.routes';
 import shippingRoutes from './routes/shipping.routes';
+import { startExpirePendingOrdersJob } from './jobs/expirePendingOrders';
 
 const app = express();
 const port = process.env.PORT || 3333;
@@ -64,4 +65,5 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 // Escuta em 0.0.0.0 para ser acessível a partir de outros containers Docker
 app.listen(Number(port), '0.0.0.0', () => {
   console.log(`Server running on 0.0.0.0:${port}`);
+  startExpirePendingOrdersJob(5 * 60 * 1000);
 });
