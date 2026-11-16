@@ -5,6 +5,7 @@ import {
   getMyOrders,
   getAdminOrders,
   updateOrderStatus,
+  refundOrder,
 } from '../controllers/order.controller';
 
 const router = Router();
@@ -15,5 +16,6 @@ router.get('/admin', authenticate, authorizeAdmin, getAdminOrders);
 
 router.get('/:id', authenticate, getOrder);
 router.patch('/:id/status', authenticate, authorizeAdmin, updateOrderStatus);
+router.post('/:id/refund', authenticate, authorizeAdmin, refundOrder);
 
 export default router;

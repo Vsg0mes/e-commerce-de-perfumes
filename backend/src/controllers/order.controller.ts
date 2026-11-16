@@ -11,6 +11,66 @@ const itemsInclude = {
   include: { product: { select: { id: true, name: true, image: true, volume: true } } },
 } as const;
 
+/**
+ * Aplica no banco a transição para reembolsado (status CANCELLED, paymentStatus REFUNDED)
+ * e devolve o estoque uma única vez caso o pedido estivesse em PAID ou PROCESSING.
+ * Idempotente e seguro contra concorrência entre endpoint de reembolso e webhook `charge.refunded`.
+ */
+export async function applyOrderRefundInDb(orderId: string): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) return false;
+
+    const now = new Date();
+
+    // Caso 1: Pedido PAID ou PROCESSING com pagamento aprovado -> cancela, marca REFUNDED e devolve estoque 1x
+    const updatedWithStock = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        status: { in: ['PAID', 'PROCESSING'] },
+        paymentStatus: 'APPROVED',
+      },
+      data: {
+        status: 'CANCELLED',
+        paymentStatus: 'REFUNDED',
+        cancelledAt: order.cancelledAt ?? now,
+        needsManualReview: false,
+      },
+    });
+
+    if (updatedWithStock.count === 1) {
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+      return true;
+    }
+
+    // Caso 2: Pedido já havia sido cancelado/expirado (estoque já devolvido) ou outro estado,
+    // mas o pagamento foi reembolsado (ex.: via painel da Stripe): apenas atualiza paymentStatus para REFUNDED.
+    const updatedStatusOnly = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        paymentStatus: { not: 'REFUNDED' },
+      },
+      data: {
+        paymentStatus: 'REFUNDED',
+        ...(order.status === 'PENDING' || order.status === 'PAID' || order.status === 'PROCESSING'
+          ? { status: 'CANCELLED', cancelledAt: order.cancelledAt ?? now }
+          : {}),
+        needsManualReview: false,
+      },
+    });
+
+    return updatedStatusOnly.count === 1;
+  });
+}
+
 export const getOrder = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -131,10 +191,10 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
 type OrderStatusValue = z.infer<typeof orderStatusEnum>;
 
 // Transições que o admin pode fazer. PAID só é definido pelo webhook do Stripe.
-const ALLOWED_TRANSITIONS: Record<OrderStatusValue, OrderStatusValue[]> = {
+export const ALLOWED_TRANSITIONS: Record<OrderStatusValue, OrderStatusValue[]> = {
   PENDING: ['CANCELLED'],
-  PAID: ['PROCESSING'],
-  PROCESSING: ['SHIPPED'],
+  PAID: ['PROCESSING', 'CANCELLED'],
+  PROCESSING: ['SHIPPED', 'CANCELLED'],
   SHIPPED: ['DELIVERED'],
   DELIVERED: [],
   CANCELLED: [],
@@ -144,6 +204,87 @@ const updateStatusSchema = z.object({
   status: orderStatusEnum,
   trackingCode: z.string().trim().max(100, 'Código de rastreio muito longo').optional(),
 });
+
+/**
+ * POST /api/orders/:id/refund — cancela pedido PAID/PROCESSING e reembolsa 100% na Stripe (ADMIN).
+ * Idempotente: chamadas repetidas (duplo clique/retry) geram um único reembolso e devolvem o estoque uma única vez.
+ */
+export const refundOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: itemsInclude, address: true, user: { select: customerSelect } },
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
+    }
+
+    // Idempotência: se o pedido já foi reembolsado e cancelado, retorna 200 sem duplicar operação
+    if (order.status === 'CANCELLED' && order.paymentStatus === 'REFUNDED') {
+      return res.json({
+        success: true,
+        message: 'Pedido já havia sido cancelado e reembolsado',
+        data: order,
+      });
+    }
+
+    if (order.status === 'SHIPPED' || order.status === 'DELIVERED') {
+      return res.status(409).json({
+        success: false,
+        message: `Não é possível cancelar e reembolsar um pedido com status ${order.status} (já enviado ou entregue)`,
+      });
+    }
+
+    const isLatePaidCancelled = order.status === 'CANCELLED' && order.paymentStatus === 'APPROVED';
+    if (order.status !== 'PAID' && order.status !== 'PROCESSING' && !isLatePaidCancelled) {
+      return res.status(409).json({
+        success: false,
+        message: `Apenas pedidos pagos (PAID ou PROCESSING) podem ser reembolsados (status atual: ${order.status})`,
+      });
+    }
+
+    if (!order.paymentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pedido não possui identificador de pagamento (paymentId) na Stripe para reembolso',
+      });
+    }
+
+    try {
+      await stripe.refunds.create(
+        { payment_intent: order.paymentId },
+        { idempotencyKey: `refund_${order.id}` }
+      );
+    } catch (stripeErr: any) {
+      // Se já foi reembolsado na Stripe, apenas garante a consistência no banco
+      if (stripeErr?.code !== 'charge_already_refunded') {
+        console.error('Erro ao criar reembolso na Stripe:', stripeErr);
+        return res.status(502).json({
+          success: false,
+          message: stripeErr?.message || 'Erro ao processar reembolso na Stripe',
+        });
+      }
+    }
+
+    await applyOrderRefundInDb(order.id);
+
+    const updated = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: { items: itemsInclude, address: true, user: { select: customerSelect } },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Pedido cancelado e reembolsado com sucesso',
+      data: updated,
+    });
+  } catch (error) {
+    console.error('Error refunding order:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+  }
+};
 
 /** PATCH /api/orders/:id/status — muda o status do pedido (ADMIN). */
 export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
@@ -167,14 +308,19 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     if (next === 'PAID') {
       return conflict('O status PAID é definido apenas pela confirmação de pagamento (webhook do Stripe)');
     }
-    if (next === 'CANCELLED' && current !== 'PENDING') {
-      return conflict(`Pedido ${current} já foi pago e não pode ser cancelado aqui: o cancelamento exigiria reembolso, que ainda não está disponível`);
+    if (next === 'CANCELLED' && current === 'SHIPPED') {
+      return conflict(`Não é possível cancelar um pedido com status ${current} (já enviado ou entregue)`);
     }
     if (!ALLOWED_TRANSITIONS[current].includes(next)) {
       return conflict(`Não é possível ir de ${current} para ${next}`);
     }
     if (next === 'SHIPPED' && !trackingCode) {
       return res.status(400).json({ success: false, message: 'Informe o código de rastreio para marcar como SHIPPED' });
+    }
+
+    // Se o pedido já foi pago (PAID ou PROCESSING) e o admin solicitou CANCELLED, executa o fluxo de reembolso
+    if (next === 'CANCELLED' && (current === 'PAID' || current === 'PROCESSING')) {
+      return refundOrder(req, res);
     }
 
     const now = new Date();

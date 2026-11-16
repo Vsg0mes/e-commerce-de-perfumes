@@ -6,6 +6,7 @@ import { stripe } from '../services/stripe';
 import { saveUserAddress, saveUserContact } from '../utils/address';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { calculateShipping } from '../utils/shipping';
+import { applyOrderRefundInDb } from './order.controller';
 
 const ORDER_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutos
 
@@ -257,6 +258,34 @@ export async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
 }
 
 /**
+ * Trata `charge.refunded` (reembolso iniciado pela API ou diretamente no painel da Stripe).
+ * Atualiza paymentStatus para REFUNDED, cancela o pedido e devolve o estoque sem duplicar.
+ */
+export async function handleChargeRefunded(charge: Stripe.Charge) {
+  const paymentIntentId =
+    typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+  const orderIdFromMeta = charge.metadata?.orderId;
+
+  if (!paymentIntentId && !orderIdFromMeta) return;
+
+  const order = await prisma.order.findFirst({
+    where: {
+      OR: [
+        ...(paymentIntentId ? [{ paymentId: paymentIntentId }] : []),
+        ...(orderIdFromMeta ? [{ id: orderIdFromMeta }] : []),
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!order) return;
+
+  await applyOrderRefundInDb(order.id);
+}
+
+/**
  * POST /api/payments/webhook
  * Exige corpo BRUTO (express.raw) e valida a assinatura antes de qualquer lógica.
  */
@@ -283,6 +312,9 @@ export const webhook = async (req: Request, res: Response) => {
         break;
       case 'payment_intent.payment_failed':
         await handlePaymentFailed(event.data.object as Stripe.PaymentIntent);
+        break;
+      case 'charge.refunded':
+        await handleChargeRefunded(event.data.object as Stripe.Charge);
         break;
       default:
         break;
