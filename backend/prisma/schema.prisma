@@ -96,10 +96,12 @@ model Order {
   items         OrderItem[]
   paymentId     String?     // External payment ID from Stripe
 
-  trackingCode  String?
-  shippedAt     DateTime?
-  deliveredAt   DateTime?
-  cancelledAt   DateTime?
+  trackingCode      String?
+  shippedAt         DateTime?
+  deliveredAt       DateTime?
+  cancelledAt       DateTime?
+  expiresAt         DateTime?
+  needsManualReview Boolean     @default(false)
   
   couponId      String?
   coupon        Coupon?     @relation(fields: [couponId], references: [id])
