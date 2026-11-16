@@ -1,110 +1,117 @@
-# E-commerce de Perfumes
+# E-commerce de Perfumes — Memorare
 
-Este projeto implementa um e-commerce completo de perfumes.
+Este projeto implementa um e-commerce completo de alta perfumaria com reserva atômica de estoque, pagamentos e reembolsos via Stripe (`PaymentIntent` + Webhooks), cupons de desconto, e-mails transacionais, recuperação de senha e painel administrativo completo.
 
 ## Tecnologias Utilizadas
 
-- **Frontend:** React, Vite, TypeScript, Tailwind CSS, Zustand, React Router DOM, Stripe Payment Element.
-- **Backend:** Node.js, Express, TypeScript, Prisma ORM, bcrypt, jsonwebtoken, Helmet, Zod.
-- **Banco de Dados:** PostgreSQL.
-- **Infraestrutura:** Docker, Docker Compose e Nginx.
-- **Pagamentos:** Integração com o Stripe via PaymentIntent (`@stripe/stripe-js` + SDK oficial Node.js + Webhooks assinados).
+- **Frontend:** React, Vite, TypeScript, Tailwind CSS, Zustand (com persistência), React Router DOM, Stripe Payment Element.
+- **Backend:** Node.js, Express, TypeScript, Prisma ORM (`Decimal(10,2)` para valores monetários), bcrypt, jsonwebtoken, Nodemailer, Helmet, Zod, Vitest.
+- **Banco de Dados:** PostgreSQL 15.
+- **Infraestrutura:** Docker, Docker Compose, Nginx e GitHub Actions (CI).
 
 ## Arquitetura
 
-O sistema é orquestrado pelo Docker Compose com proxy reverso Nginx (porta 8080):
-1. `backend/`: API REST Node.js (porta interna 3333).
-2. `frontend/`: Aplicação React/Vite (porta interna 5173).
-3. `postgres`: Banco de dados PostgreSQL (porta interna 5432).
+O sistema é orquestrado pelo Docker Compose com proxy reverso Nginx (porta `8080`):
+1. `backend/`: API REST Node.js (porta interna `3333`).
+2. `frontend/`: Aplicação React/Vite (porta interna `5173`).
+3. `postgres`: Banco de dados PostgreSQL (porta interna `5432`).
 4. `nginx`: Proxy reverso expondo `http://localhost:8080` (`/api` → backend, `/` → frontend).
-
-## Pré-requisitos
-
-- Docker
-- Docker Compose
+5. `stripe-cli` *(profile `stripe`)*: Encaminha eventos da Stripe para o webhook do backend.
 
 ## Como configurar o `.env`
 
-Copie o arquivo de exemplo para gerar suas variáveis de ambiente:
+Copie o arquivo de exemplo e preencha todas as variáveis obrigatórias:
 ```bash
 cp .env.example .env
 ```
-Preencha **todas** as variáveis obrigatórias (o `docker compose up` falha com mensagem clara se alguma faltar):
 
 | Variável | Descrição |
 |---|---|
-| `POSTGRES_PASSWORD` | Senha do banco (use a mesma em `DATABASE_URL`) |
-| `JWT_SECRET` | Segredo dos tokens. Gere com `openssl rand -hex 32` (mín. 32 caracteres em produção; valores fracos como `changeme` são rejeitados) |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Credenciais do seu painel Stripe (modo teste) |
-| `VITE_STRIPE_PUBLISHABLE_KEY` | Chave pública do Stripe (`pk_test_...`) usada pelo Payment Element no frontend |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin criado pelo seed. Em produção são obrigatórios; em desenvolvimento, sem `ADMIN_PASSWORD`, uma senha aleatória é gerada e impressa uma única vez |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Configuração opcional de SMTP (Nodemailer) para e-mails transacionais e recuperação de senha. Em desenvolvimento, se `SMTP_HOST` estiver vazio, os e-mails são exibidos no log do backend |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciais do PostgreSQL (use a mesma senha em `DATABASE_URL`) |
+| `DATABASE_URL` | URL de conexão do Prisma com o PostgreSQL |
+| `JWT_SECRET` | Segredo dos tokens JWT. Gere com `openssl rand -hex 32` (mín. 32 caracteres em produção; valores fracos são rejeitados na inicialização) |
+| `STRIPE_SECRET_KEY` | Chave secreta da Stripe (`sk_test_...`) |
+| `STRIPE_WEBHOOK_SECRET` | Segredo de assinatura do webhook da Stripe (`whsec_...`) |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Chave pública da Stripe (`pk_test_...`) para o frontend |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Credenciais do admin inicial criado pelo seed (em dev, sem `ADMIN_PASSWORD`, uma senha aleatória é gerada e impressa uma única vez) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Configuração opcional de SMTP para envio de e-mails transacionais e redefinição de senha. Em desenvolvimento, sem `SMTP_HOST`, os e-mails são registrados no console |
+| `FRONTEND_URL`, `BACKEND_URL` | URL pública da aplicação (padrão `http://localhost:8080`) |
 
 ## Como executar (Docker)
 
-Para iniciar todos os serviços, execute na raiz do projeto:
-
 ```bash
 docker compose up -d --build
-```
-
-O backend aguarda o banco estar saudável (healthcheck) antes de inicializar.
-
-## Como executar Migrations e Seed
-
-Após os containers estarem rodando:
-
-```bash
 docker compose exec backend npx prisma migrate deploy
 docker compose exec backend npm run prisma:seed
 ```
 
-Isso aplicará todas as migrations do esquema do banco de dados e adicionará marcas, categorias, perfumes fictícios e o usuário admin definido por `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Se o admin já existir, a senha não é sobrescrita.
+Acesse a aplicação em **[http://localhost:8080](http://localhost:8080)**.
 
-## Como acessar
+## Como usar o Stripe CLI (Webhooks em Desenvolvimento)
 
-- **Aplicação (via Nginx):** [http://localhost:8080](http://localhost:8080)
-- **Healthcheck da API:** [http://localhost:8080/api/health](http://localhost:8080/api/health)
+Você pode escutar e encaminhar os eventos `payment_intent.succeeded`, `payment_intent.payment_failed` e `charge.refunded` de duas formas:
+
+1. **Via container `stripe-cli` do Docker Compose:**
+   ```bash
+   docker compose --profile stripe up -d stripe-cli
+   docker compose logs -f stripe-cli
+   ```
+2. **Via Stripe CLI instalado localmente:**
+   ```bash
+   stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,charge.refunded --forward-to http://localhost:8080/api/payments/webhook
+   ```
+   Copie o `whsec_...` exibido pelo comando para `STRIPE_WEBHOOK_SECRET` no `.env` e reinicie o backend (`docker compose up -d backend`).
+
+## Como rodar os testes automatizados (Vitest)
+
+Os testes cobrem cálculo de frete por CEP, reserva/devolução atômica de estoque em concorrência, idempotência do webhook, reembolso total, aplicação/devolução de cupons e máquina de estados de pedidos:
+
+```bash
+docker compose exec backend npm test
+```
+
+Para validar o build de produção do backend e do frontend:
+```bash
+docker compose exec backend npm run build
+docker compose exec frontend npm run build
+```
 
 ## Rotas Principais da API
 
-### Autenticação e Perfil
-- `POST /api/auth/register`: Cadastro de usuário
+### Autenticação e Conta
+- `POST /api/auth/register`: Cadastro de usuário (com validação de dígitos verificadores de CPF)
 - `POST /api/auth/login`: Login e emissão de JWT
-- `GET /api/users/me`: Dados e endereço mais recente do usuário autenticado
-- `PATCH /api/users/me`: Atualiza nome, telefone e endereço do usuário autenticado
-- `PUT /api/users/me/password`: Altera a senha do usuário autenticado
+- `POST /api/auth/forgot-password`: Solicita link de recuperação de senha (resposta sempre genérica; token salvo como hash SHA-256 com validade de 1h e uso único)
+- `POST /api/auth/reset-password`: Redefine a senha usando o token de recuperação
+- `GET /api/users/me`: Retorna perfil e lista de endereços salvos do usuário autenticado
+- `PATCH /api/users/me`: Atualiza nome, telefone e endereço de entrega
+- `PUT /api/users/me/password`: Altera a senha exigindo a senha atual
 
-### Produtos (Catálogo)
-- `GET /api/products`: Lista perfumes (paginação, filtros)
-- `GET /api/products/:id`: Detalhes do perfume
-- `GET /api/products/brands`: Lista marcas
-- `GET /api/products/categories`: Lista categorias
-- `POST /api/products`: Cria um perfume (Requer ADMIN)
-- `PUT /api/products/:id`: Atualiza um perfume (Requer ADMIN)
-- `DELETE /api/products/:id`: Remove um perfume (Requer ADMIN)
+### Catálogo, Marcas e Categorias
+- `GET /api/products`: Lista paginada de perfumes ativos (filtros: `search`, `brand`, `category`, `gender`, `olfactoryFamily`, `minPrice`, `maxPrice`, `sort`, `page`, `limit`)
+- `GET /api/products/olfactory-families`: Lista famílias olfativas disponíveis
+- `GET /api/products/:id`: Detalhes de um perfume ativo (`404` se inativo ou inexistente)
+- `GET /api/products/admin`: Lista paginada de produtos para o admin (inclui inativos e filtro de estoque baixo)
+- `POST /api/products` | `PUT /api/products/:id`: Cria ou edita perfume (ADMIN)
+- `PATCH /api/products/:id/active`: Ativa ou desativa perfume (ADMIN)
+- `GET /api/products/brands` | `POST /api/products/brands` | `PUT /api/products/brands/:id` | `DELETE /api/products/brands/:id`: CRUD de marcas com bloqueio de exclusão caso haja produtos vinculados
+- `GET /api/products/categories` | `POST /api/products/categories` | `PUT /api/products/categories/:id` | `DELETE /api/products/categories/:id`: CRUD de categorias com bloqueio de exclusão caso haja produtos vinculados
 
-### Frete, Pedidos & Pagamentos
-- `GET /api/shipping/quote?zipCode=...`: Cotação de frete e prazo por CEP
-- `POST /api/payments/create-payment-intent`: Reserva o estoque atomicamente, cria o `Order` (`PENDING`, com expiração em 30 minutos) e gera o `PaymentIntent` no Stripe retornando o `clientSecret`
-- `POST /api/payments/webhook`: Webhook assinado da Stripe (`payment_intent.succeeded` e `payment_intent.payment_failed`)
-- `GET /api/orders/mine`: Lista paginada dos pedidos do cliente logado
-- `GET /api/orders/admin`: Lista paginada e filtrável de todos os pedidos (Requer ADMIN)
-- `GET /api/orders/:id`: Detalhes de um pedido (apenas dono do pedido ou ADMIN)
-- `PATCH /api/orders/:id/status`: Atualiza o status de um pedido (Requer ADMIN)
+### Cupons, Frete, Pagamentos e Pedidos
+- `GET /api/shipping/quote?zipCode=...`: Calcula frete e prazo por faixa de CEP
+- `POST /api/coupons/validate`: Valida código de cupom e calcula o desconto no servidor
+- `GET /api/coupons` | `POST /api/coupons` | `PUT /api/coupons/:id` | `DELETE /api/coupons/:id`: CRUD de cupons (ADMIN)
+- `POST /api/payments/create-payment-intent`: Valida CPF/CEP/UF, reserva estoque e uso de cupom atomicamente, cria o `Order` (`PENDING`, expiração em 30 min) e cria o `PaymentIntent` na Stripe
+- `POST /api/payments/webhook`: Processa `payment_intent.succeeded`, `payment_intent.payment_failed` e `charge.refunded` de forma idempotente
+- `GET /api/orders/mine`: Lista paginada de pedidos do cliente autenticado
+- `GET /api/orders/:id`: Detalhes de um pedido (dono ou ADMIN)
+- `POST /api/orders/:id/payment-intent`: Retoma pagamento de pedido `PENDING` não expirado reutilizando o `PaymentIntent`
+- `POST /api/orders/:id/cancel`: Cancela pedido `PENDING` do próprio cliente devolvendo estoque e cupom
+- `GET /api/orders/admin`: Lista paginada e filtrável de todos os pedidos (ADMIN)
+- `GET /api/orders/admin/export`: Exporta pedidos filtrados em CSV com BOM UTF-8 (ADMIN)
+- `PATCH /api/orders/:id/status`: Atualiza status do pedido (`PAID → PROCESSING → SHIPPED → DELIVERED`, `PENDING/PAID/PROCESSING → CANCELLED`) (ADMIN)
+- `POST /api/orders/:id/refund`: Cancela e reembolsa integralmente na Stripe pedidos `PAID` ou `PROCESSING`, devolvendo estoque e uso de cupom uma única vez (ADMIN)
 
-## Integração de Pagamento (Stripe PaymentIntent)
-
-Ao finalizar o checkout, o frontend envia apenas os IDs/quantidades dos itens e os dados de entrega para `POST /api/payments/create-payment-intent`. O servidor recalcula preços e frete a partir do banco, reserva o estoque de cada item de forma atômica (`$transaction` + `updateMany` condicional), cria o registro `Order` com `status = PENDING` e `expiresAt = agora + 30 min`, e cria um `PaymentIntent` na Stripe devolvendo o `clientSecret` para o `PaymentElement` do frontend.
-
-Após o processamento do pagamento na Stripe:
-- `payment_intent.succeeded`: o webhook valida a assinatura e o valor cobrado e marca o pedido como `PAID` / `APPROVED` de forma idempotente (o estoque já foi reservado na criação). Caso o pagamento chegue para um pedido já expirado/cancelado, o sistema registra o pagamento sem reabater estoque silenciosamente e marca `needsManualReview = true`.
-- `payment_intent.payment_failed`: o webhook marca o pagamento como `REJECTED`, cancela o pedido e devolve o estoque reservado uma única vez.
-- Um job periódico (`expirePendingOrders`, a cada 5 minutos) cancela pedidos `PENDING` vencidos (`expiresAt < agora`), cancela o `PaymentIntent` correspondente na Stripe e devolve o estoque reservado de forma idempotente.
-
-## Decisões Arquiteturais
-
-1. **Separação de Responsabilidades:** Utilizou-se Prisma para camada de persistência e Controllers com validação Zod para requisição/resposta.
-2. **Reserva Atômica e Idempotência:** Reservas e devoluções de estoque usam transações com `updateMany` condicional (lock otimista), evitando estoque negativo em compras simultâneas e duplicidade em reentregas de webhook.
-3. **Zustand no Frontend:** Gerenciamento leve do estado global de autenticação, tema e carrinho.
-4. **Tailwind CSS:** Interface responsiva com suporte a modo escuro.
+### Dashboard e Clientes (Admin)
+- `GET /api/admin/stats`: Métricas agregadas (receita e pedidos pagos de hoje, 7 e 30 dias, pedidos por status, top 5 mais vendidos e produtos com estoque baixo)
+- `GET /api/admin/customers`: Lista paginada de clientes com busca, total de pedidos e valor total gasto

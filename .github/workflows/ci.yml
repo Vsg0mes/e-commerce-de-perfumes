@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres_password
+          POSTGRES_DB: ecommerce_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d ecommerce_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:ci_postgres_password@localhost:5432/ecommerce_test?schema=public
+      JWT_SECRET: ci_test_jwt_secret_with_at_least_32_characters_long_12345
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder_key
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder_secret
+      FRONTEND_URL: http://localhost:8080
+      BACKEND_URL: http://localhost:8080
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Generate Prisma Client & Apply Migrations
+        working-directory: ./backend
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Build Backend
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Run Backend Tests (Vitest)
+        working-directory: ./backend
+        run: npm test
+
+      - name: Install & Build Frontend
+        working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
