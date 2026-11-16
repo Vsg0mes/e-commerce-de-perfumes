@@ -198,6 +198,100 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const adminExportSchema = z.object({
+  status: orderStatusEnum.optional(),
+  paymentStatus: paymentStatusEnum.optional(),
+  q: z.string().trim().max(100).optional(),
+  sort: z.enum(['asc', 'desc']).default('desc'),
+});
+
+const csvEscape = (value: unknown): string => {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/[";\r\n,]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+
+/**
+ * GET /api/orders/admin/export
+ * Exporta todos os pedidos correspondentes ao filtro em CSV com BOM UTF-8 (compatível com Excel).
+ */
+export const exportAdminOrdersCsv = async (req: AuthRequest, res: Response) => {
+  try {
+    const { status, paymentStatus, q, sort } = adminExportSchema.parse(req.query);
+
+    const where: Prisma.OrderWhereInput = {
+      ...(status && { status }),
+      ...(paymentStatus && { paymentStatus }),
+      ...(q && {
+        OR: [
+          { id: { contains: q, mode: 'insensitive' } },
+          { user: { email: { contains: q, mode: 'insensitive' } } },
+          { user: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const orders = await prisma.order.findMany({
+      where,
+      orderBy: { createdAt: sort },
+      include: { items: itemsInclude, address: true, user: { select: customerSelect } },
+    });
+
+    const headers = [
+      'ID do Pedido',
+      'Data',
+      'Cliente',
+      'E-mail',
+      'Telefone',
+      'Status do Pedido',
+      'Status do Pagamento',
+      'Frete (R$)',
+      'Desconto (R$)',
+      'Total (R$)',
+      'Código de Rastreio',
+      'Cidade/UF',
+      'Itens',
+    ];
+
+    const rows = orders.map((o) => {
+      const itemsSummary = o.items
+        .map((i) => `${i.quantity}x ${i.product.name}`)
+        .join(' | ');
+      return [
+        o.id,
+        o.createdAt.toISOString(),
+        o.user?.name ?? '',
+        o.user?.email ?? '',
+        o.user?.phone ?? '',
+        o.status,
+        o.paymentStatus,
+        o.shippingAmount.toFixed(2).replace('.', ','),
+        o.discountAmount.toFixed(2).replace('.', ','),
+        o.totalAmount.toFixed(2).replace('.', ','),
+        o.trackingCode ?? '',
+        `${o.address.city}/${o.address.state}`,
+        itemsSummary,
+      ]
+        .map(csvEscape)
+        .join(';');
+    });
+
+    const csvContent = '\uFEFF' + [headers.map(csvEscape).join(';'), ...rows].join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="pedidos.csv"');
+    return res.status(200).send(csvContent);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, message: error.errors[0].message });
+    }
+    console.error('Error exporting orders CSV:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+  }
+};
+
 type OrderStatusValue = z.infer<typeof orderStatusEnum>;
 
 // Transições que o admin pode fazer. PAID só é definido pelo webhook do Stripe.
