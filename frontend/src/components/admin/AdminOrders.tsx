@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { ChevronDown, ChevronRight, RotateCcw, Search, Truck } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, RotateCcw, Search, Truck } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import {
   ADMIN_TRANSITIONS,
@@ -50,6 +50,7 @@ export function AdminOrders({ onMessage }: Props) {
   const [shippingFor, setShippingFor] = useState<string | null>(null);
   const [trackingCode, setTrackingCode] = useState('');
   const [updating, setUpdating] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Debounce da busca; volta para a página 1 ao mudar filtros
   useEffect(() => {
@@ -147,6 +148,41 @@ export function AdminOrders({ onMessage }: Props) {
     applyStatus(order, 'SHIPPED', code);
   };
 
+  const handleExportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await axios.get(`${apiBase}/orders/admin/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          sort,
+          ...(status && { status }),
+          ...(paymentStatus && { paymentStatus }),
+          ...(q && { q }),
+        },
+        responseType: 'text',
+      });
+      const rawText = typeof res.data === 'string' ? res.data : String(res.data ?? '');
+      const withBom = rawText.startsWith('\uFEFF') ? rawText : `\uFEFF${rawText}`;
+      const blob = new Blob([withBom], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      onMessage({
+        type: 'error',
+        text: (axios.isAxiosError(err) && err.response?.data?.message) || 'Erro ao exportar CSV.',
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-wrap gap-3 mb-6">
@@ -171,6 +207,15 @@ export function AdminOrders({ onMessage }: Props) {
           <option value="desc">Mais recentes</option>
           <option value="asc">Mais antigos</option>
         </select>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={exporting}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+        >
+          <Download size={16} />
+          {exporting ? 'Exportando...' : 'Exportar CSV'}
+        </button>
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">

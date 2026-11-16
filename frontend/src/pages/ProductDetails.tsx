@@ -9,30 +9,33 @@ export function ProductDetails() {
   const navigate = useNavigate();
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [imgError, setImgError] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
 
   useEffect(() => {
     const fetchProduct = async () => {
+      setLoading(true);
+      setNotFound(false);
       try {
         const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
         const res = await axios.get(`${apiBase}/products/${id}`);
-        if (res.data?.success) {
+        if (res.data?.success && res.data?.data) {
           setProduct(res.data.data);
         } else {
-          navigate('/');
+          setNotFound(true);
         }
       } catch (error) {
         console.error('Error fetching product:', error);
-        navigate('/');
+        setNotFound(true);
       } finally {
         setLoading(false);
       }
     };
 
     if (id) fetchProduct();
-  }, [id, navigate]);
+  }, [id]);
 
   if (loading) {
     return (
@@ -45,7 +48,26 @@ export function ProductDetails() {
     );
   }
 
-  if (!product) return null;
+  if (notFound || !product) {
+    return (
+      <div className="bg-[#080808] text-gray-100 min-h-[70vh] flex flex-col items-center justify-center px-4 py-24 text-center">
+        <Sparkles size={28} className="text-[#D4AF37] mb-4" />
+        <h1 className="text-2xl sm:text-3xl font-serif text-white mb-2">
+          Fragrância indisponível
+        </h1>
+        <p className="text-sm text-gray-400 max-w-md mb-8">
+          Este perfume não foi encontrado ou não está mais disponível no nosso catálogo ativo.
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#D4AF37] text-[#080808] text-xs font-semibold uppercase tracking-[0.2em] hover:bg-[#E5C358] transition-colors"
+        >
+          <ArrowLeft size={14} />
+          <span>Voltar à Coleção</span>
+        </button>
+      </div>
+    );
+  }
 
   const price = product.promotionalPrice || product.price;
 
