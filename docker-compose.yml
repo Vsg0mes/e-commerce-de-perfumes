@@ -32,6 +32,11 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:?defina STRIPE_WEBHOOK_SECRET no .env}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://localhost:8080}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - MAIL_FROM=${MAIL_FROM:-Memorare Perfumes <no-reply@memorare.local>}
     volumes:
       - ./backend/uploads:/usr/src/app/uploads
     depends_on:

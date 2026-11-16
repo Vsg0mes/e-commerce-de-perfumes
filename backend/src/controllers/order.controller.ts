@@ -4,6 +4,11 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { stripe } from '../services/stripe';
+import {
+  sendOrderCancelledEmail,
+  sendOrderDeliveredEmail,
+  sendOrderShippedEmail,
+} from '../services/mailer';
 
 // Cliente sempre com select explícito: nunca expor `password`.
 const customerSelect = { id: true, name: true, email: true, phone: true } as const;
@@ -17,7 +22,7 @@ const itemsInclude = {
  * Idempotente e seguro contra concorrência entre endpoint de reembolso e webhook `charge.refunded`.
  */
 export async function applyOrderRefundInDb(orderId: string): Promise<boolean> {
-  return prisma.$transaction(async (tx) => {
+  const didUpdate = await prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({
       where: { id: orderId },
       include: { items: true },
@@ -69,6 +74,11 @@ export async function applyOrderRefundInDb(orderId: string): Promise<boolean> {
 
     return updatedStatusOnly.count === 1;
   });
+
+  if (didUpdate) {
+    await sendOrderCancelledEmail(orderId);
+  }
+  return didUpdate;
 }
 
 export const getOrder = async (req: AuthRequest, res: Response) => {
@@ -354,6 +364,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       if (!cancelled) {
         return conflict('O pedido foi alterado por outra operação. Recarregue e tente novamente');
       }
+      await sendOrderCancelledEmail(id);
     } else {
       const data: Prisma.OrderUpdateManyMutationInput = { status: next };
       if (next === 'SHIPPED') {
@@ -367,6 +378,12 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       const result = await prisma.order.updateMany({ where: { id, status: current }, data });
       if (result.count === 0) {
         return conflict('O pedido foi alterado por outra operação. Recarregue e tente novamente');
+      }
+
+      if (next === 'SHIPPED') {
+        await sendOrderShippedEmail(id);
+      } else if (next === 'DELIVERED') {
+        await sendOrderDeliveredEmail(id);
       }
     }
 

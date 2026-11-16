@@ -38,6 +38,7 @@ Preencha **todas** as variáveis obrigatórias (o `docker compose up` falha com 
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Credenciais do seu painel Stripe (modo teste) |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Chave pública do Stripe (`pk_test_...`) usada pelo Payment Element no frontend |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Admin criado pelo seed. Em produção são obrigatórios; em desenvolvimento, sem `ADMIN_PASSWORD`, uma senha aleatória é gerada e impressa uma única vez |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Configuração opcional de SMTP (Nodemailer) para e-mails transacionais e recuperação de senha. Em desenvolvimento, se `SMTP_HOST` estiver vazio, os e-mails são exibidos no log do backend |
 
 ## Como executar (Docker)
 

@@ -1,5 +1,6 @@
 import prisma from '../prisma';
 import { stripe } from '../services/stripe';
+import { sendOrderCancelledEmail } from '../services/mailer';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -60,6 +61,7 @@ export async function expirePendingOrders(now: Date = new Date()): Promise<numbe
     if (didExpire) {
       expiredCount += 1;
       console.log(`[expirePendingOrders] Pedido ${order.id} expirado e estoque devolvido.`);
+      await sendOrderCancelledEmail(order.id);
     }
   }
 

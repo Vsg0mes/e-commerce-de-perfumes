@@ -7,6 +7,7 @@ import { saveUserAddress, saveUserContact } from '../utils/address';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { calculateShipping } from '../utils/shipping';
 import { applyOrderRefundInDb } from './order.controller';
+import { sendOrderConfirmedEmail } from '../services/mailer';
 
 const ORDER_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutos
 
@@ -203,7 +204,10 @@ export async function handlePaymentSucceeded(pi: Stripe.PaymentIntent) {
     where: { id: orderId, status: 'PENDING', paymentStatus: 'PENDING' },
     data: { paymentStatus: 'APPROVED', status: 'PAID', paymentId: pi.id },
   });
-  if (updated.count === 1) return;
+  if (updated.count === 1) {
+    await sendOrderConfirmedEmail(orderId);
+    return;
+  }
 
   // Pedido já havia expirado, sido cancelado ou rejeitado (estoque já devolvido):
   // preserva o registro do pagamento e sinaliza revisão manual sem abater estoque novamente.
