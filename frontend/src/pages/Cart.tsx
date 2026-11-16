@@ -1,9 +1,17 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, AlertTriangle } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 
 export function Cart() {
-  const { items, removeItem, updateQuantity, getTotal } = useCartStore();
+  const { items, removeItem, updateQuantity, getTotal, revalidateCart } = useCartStore();
+  const [notices, setNotices] = useState<string[]>([]);
+
+  useEffect(() => {
+    revalidateCart().then((changes) => {
+      if (changes.length > 0) setNotices(changes);
+    });
+  }, [revalidateCart]);
 
   const formatPrice = (p: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p);
@@ -42,6 +50,23 @@ export function Cart() {
             Sacola de Compras
           </h1>
         </div>
+
+        {notices.length > 0 && (
+          <div
+            role="alert"
+            className="mb-8 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs sm:text-sm space-y-1"
+          >
+            <div className="flex items-center gap-2 font-semibold text-amber-300 mb-1">
+              <AlertTriangle size={16} />
+              <span>Atualizações nos itens da sua sacola:</span>
+            </div>
+            <ul className="list-disc list-inside space-y-1">
+              {notices.map((msg, i) => (
+                <li key={i}>{msg}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="lg:grid lg:grid-cols-12 lg:gap-x-12 lg:items-start">
           

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Package, AlertCircle, Truck } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Package, AlertCircle, Truck, ArrowRight, CreditCard } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import {
   ORDER_STATUS_COLOR,
@@ -96,7 +96,12 @@ export function Orders() {
               <div key={order.id} className="bg-white dark:bg-gray-900 shadow-sm overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
                 <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800">
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">Pedido {shortOrderId(order.id)}</p>
+                    <Link
+                      to={`/orders/${order.id}`}
+                      className="font-semibold text-gray-900 dark:text-gray-100 hover:text-indigo-600 dark:hover:text-indigo-400"
+                    >
+                      Pedido {shortOrderId(order.id)}
+                    </Link>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(order.createdAt)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -106,6 +111,20 @@ export function Orders() {
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${PAYMENT_STATUS_COLOR[order.paymentStatus]}`}>
                       Pagamento: {PAYMENT_STATUS_LABEL[order.paymentStatus]}
                     </span>
+                    {order.status === 'PENDING' && order.paymentStatus === 'PENDING' && (
+                      <Link
+                        to={`/orders/${order.id}`}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700"
+                      >
+                        <CreditCard size={12} /> Pagar agora
+                      </Link>
+                    )}
+                    <Link
+                      to={`/orders/${order.id}`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline ml-1"
+                    >
+                      Detalhes <ArrowRight size={13} />
+                    </Link>
                   </div>
                 </div>
 
