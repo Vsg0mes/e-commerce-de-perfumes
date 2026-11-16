@@ -44,7 +44,7 @@ const createIntentSchema = z.object({
   }),
 });
 
-const toCents = (value: number) => Math.round(value * 100);
+const toCents = (value: unknown) => Math.round(Number(value) * 100);
 
 /**
  * POST /api/payments/create-payment-intent

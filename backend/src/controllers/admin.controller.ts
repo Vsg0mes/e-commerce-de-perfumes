@@ -11,7 +11,7 @@ const statsQuerySchema = z.object({
   lowStockLimit: z.coerce.number().int().min(0).max(1000).default(5),
 });
 
-const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+const roundCurrency = (value: unknown) => Math.round(Number(value ?? 0) * 100) / 100;
 
 /**
  * GET /api/admin/stats
@@ -116,7 +116,7 @@ export const getAdminStats = async (req: AuthRequest, res: Response) => {
         productId: item.productId,
         name: p?.name ?? 'Produto removido',
         brandName: p?.brand.name ?? '—',
-        price: p?.promotionalPrice ?? p?.price ?? 0,
+        price: Number(p?.promotionalPrice ?? p?.price ?? 0),
         stock: p?.stock ?? 0,
         image: p?.image ?? null,
         totalSold: item._sum.quantity ?? 0,
@@ -155,7 +155,7 @@ export const getAdminStats = async (req: AuthRequest, res: Response) => {
   }
 };
 
-function days30DaysValue(ordersCount: number, sumTotal: number) {
+function days30DaysValue(ordersCount: number, sumTotal: unknown) {
   return {
     ordersCount,
     revenue: roundCurrency(sumTotal),

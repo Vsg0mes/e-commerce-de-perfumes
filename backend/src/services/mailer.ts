@@ -32,8 +32,8 @@ function getTransporter(): Transporter | null {
   return cachedTransporter;
 }
 
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+const formatBRL = (value: unknown) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value));
 
 const escapeHtml = (str: string) =>
   str
@@ -119,7 +119,7 @@ export async function sendOrderConfirmedEmail(orderId: string): Promise<void> {
     const addressLine = `${addr.street}, ${addr.number}${addr.complement ? ` - ${addr.complement}` : ''} — ${addr.neighborhood}, ${addr.city}/${addr.state} (CEP ${addr.zipCode})`;
 
     const itemsText = order.items
-      .map((i) => `- ${i.quantity}x ${i.product.name}${i.product.volume ? ` (${i.product.volume})` : ''}: ${formatBRL(i.price * i.quantity)}`)
+      .map((i) => `- ${i.quantity}x ${i.product.name}${i.product.volume ? ` (${i.product.volume})` : ''}: ${formatBRL(Number(i.price) * i.quantity)}`)
       .join('\n');
 
     const text = [
@@ -131,7 +131,7 @@ export async function sendOrderConfirmedEmail(orderId: string): Promise<void> {
       itemsText,
       ``,
       `Frete: ${formatBRL(order.shippingAmount)}`,
-      ...(order.discountAmount > 0 ? [`Desconto: -${formatBRL(order.discountAmount)}`] : []),
+      ...(Number(order.discountAmount) > 0 ? [`Desconto: -${formatBRL(order.discountAmount)}`] : []),
       `Total pago: ${formatBRL(order.totalAmount)}`,
       ``,
       `Endereço de entrega:`,
@@ -143,7 +143,7 @@ export async function sendOrderConfirmedEmail(orderId: string): Promise<void> {
         (i) =>
           `<tr>
             <td style="padding: 6px 0; border-bottom: 1px solid #f3f4f6;">${i.quantity}× ${escapeHtml(i.product.name)}${i.product.volume ? ` (${escapeHtml(i.product.volume)})` : ''}</td>
-            <td style="padding: 6px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${formatBRL(i.price * i.quantity)}</td>
+            <td style="padding: 6px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${formatBRL(Number(i.price) * i.quantity)}</td>
           </tr>`
       )
       .join('');
@@ -159,7 +159,7 @@ export async function sendOrderConfirmedEmail(orderId: string): Promise<void> {
            <td style="padding: 6px 0; text-align: right; color: #6b7280;">${formatBRL(order.shippingAmount)}</td>
          </tr>
          ${
-           order.discountAmount > 0
+           Number(order.discountAmount) > 0
              ? `<tr><td style="padding: 6px 0; color: #059669;">Desconto</td><td style="padding: 6px 0; text-align: right; color: #059669;">-${formatBRL(order.discountAmount)}</td></tr>`
              : ''
          }

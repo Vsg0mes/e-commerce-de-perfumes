@@ -139,7 +139,7 @@ export const resumeOrderPayment = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const amountCents = Math.round(order.totalAmount * 100);
+    const amountCents = Math.round(Number(order.totalAmount) * 100);
     let clientSecret: string | null = null;
 
     if (order.paymentId) {
@@ -177,7 +177,7 @@ export const resumeOrderPayment = async (req: AuthRequest, res: Response) => {
       data: {
         clientSecret,
         orderId: order.id,
-        amount: order.totalAmount,
+        amount: Number(order.totalAmount),
       },
     });
   } catch (error) {
@@ -423,9 +423,9 @@ export const exportAdminOrdersCsv = async (req: AuthRequest, res: Response) => {
         o.user?.phone ?? '',
         o.status,
         o.paymentStatus,
-        o.shippingAmount.toFixed(2).replace('.', ','),
-        o.discountAmount.toFixed(2).replace('.', ','),
-        o.totalAmount.toFixed(2).replace('.', ','),
+        Number(o.shippingAmount).toFixed(2).replace('.', ','),
+        Number(o.discountAmount).toFixed(2).replace('.', ','),
+        Number(o.totalAmount).toFixed(2).replace('.', ','),
         o.trackingCode ?? '',
         `${o.address.city}/${o.address.state}`,
         itemsSummary,
