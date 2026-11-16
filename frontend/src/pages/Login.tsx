@@ -117,7 +117,15 @@ export function Login() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Senha</label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-medium text-[#D4AF37] hover:text-[#E5C358] transition-colors"
+                  >
+                    Esqueci minha senha
+                  </Link>
+                </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Lock size={18} className="text-gray-400" />
@@ -166,11 +174,6 @@ export function Login() {
                   Cadastre-se grátis
                 </Link>
               </p>
-            </div>
-
-            {/* Dev hint */}
-            <div className="mt-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-300">
-              <strong>Dev:</strong> admin@ecommerce.com / admin123
             </div>
           </div>
         </div>
