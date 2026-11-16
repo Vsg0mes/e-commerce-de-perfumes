@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Eye, EyeOff, Mail, Lock, Sparkles, Truck, ShieldCheck, Gem } from 'lucide-react';
