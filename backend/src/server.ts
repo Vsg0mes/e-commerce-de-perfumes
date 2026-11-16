@@ -11,6 +11,7 @@ import paymentRoutes from './routes/payment.routes';
 import userRoutes from './routes/user.routes';
 import shippingRoutes from './routes/shipping.routes';
 import adminRoutes from './routes/admin.routes';
+import couponRoutes from './routes/coupon.routes';
 import { startExpirePendingOrdersJob } from './jobs/expirePendingOrders';
 
 const app = express();
@@ -56,6 +57,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/coupons', couponRoutes);
 
 // Erros (ex: upload inválido do multer) sempre em JSON
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -9,6 +9,10 @@ import { calculateShipping } from '../utils/shipping';
 import { applyOrderRefundInDb } from './order.controller';
 import { sendOrderConfirmedEmail } from '../services/mailer';
 import { isValidCpf } from '../utils/cpf';
+import {
+  calculateCouponDiscountCents,
+  getCouponValidationError,
+} from './coupon.controller';
 
 const ORDER_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutos
 
@@ -19,7 +23,14 @@ class InsufficientStockError extends Error {
   }
 }
 
-// Apenas ids e quantidades são aceitos do cliente. NUNCA preço/total.
+class CouponLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CouponLimitError';
+  }
+}
+
+// Apenas ids, quantidades e código opcional de cupom são aceitos do cliente. NUNCA preço/desconto/total.
 const createIntentSchema = z.object({
   items: z
     .array(
@@ -29,6 +40,7 @@ const createIntentSchema = z.object({
       })
     )
     .min(1),
+  couponCode: z.string().trim().optional(),
   customerInfo: z.object({
     name: z.string().min(1),
     email: z.string().email(),
@@ -48,7 +60,7 @@ const toCents = (value: unknown) => Math.round(Number(value) * 100);
 
 /**
  * POST /api/payments/create-payment-intent
- * Reserva o estoque atomicamente, recalcula o total no servidor e cria o PaymentIntent.
+ * Reserva o estoque e o cupom atomicamente, recalcula o total no servidor e cria o PaymentIntent.
  * Retorna apenas o client_secret (nenhum dado de cartão passa por aqui).
  */
 export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
@@ -107,14 +119,31 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
       orderItems.push({ productId: product.id, quantity, price: unitPriceCents / 100 });
     }
 
+    // Validação e cálculo do cupom NO SERVIDOR
+    const normalizedCouponCode = data.couponCode?.trim().toUpperCase() || '';
+    const coupon = normalizedCouponCode
+      ? await prisma.coupon.findUnique({ where: { code: normalizedCouponCode } })
+      : null;
+
+    if (normalizedCouponCode) {
+      const couponError = getCouponValidationError(coupon);
+      if (couponError || !coupon) {
+        return res.status(400).json({ success: false, message: couponError || 'Cupom inválido' });
+      }
+    }
+
+    const discountCents = coupon
+      ? calculateCouponDiscountCents(subtotalCents, coupon.discountType, coupon.discountValue)
+      : 0;
     const shippingCents = toCents(shipping.amount);
-    const amountCents = subtotalCents + shippingCents;
+    const itemsAfterDiscountCents = Math.max(0, subtotalCents - discountCents);
+    const amountCents = itemsAfterDiscountCents + shippingCents;
 
     const c = data.customerInfo;
     const address = await saveUserAddress(user.id, c);
     await saveUserContact(user.id, c.cpf, c.phone);
 
-    // Reserva atômica de estoque + criação do pedido PENDING com expiração de 30 min
+    // Reserva atômica de estoque + uso do cupom + criação do pedido PENDING com expiração de 30 min
     const order = await prisma.$transaction(async (tx) => {
       for (const productId of sortedProductIds) {
         const product = productById.get(productId)!;
@@ -128,12 +157,31 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
         }
       }
 
+      if (coupon) {
+        const now = new Date();
+        const couponReserved = await tx.coupon.updateMany({
+          where: {
+            id: coupon.id,
+            isActive: true,
+            startDate: { lte: now },
+            expirationDate: { gte: now },
+            ...(coupon.usageLimit !== null ? { usedCount: { lt: coupon.usageLimit } } : {}),
+          },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (couponReserved.count !== 1) {
+          throw new CouponLimitError('Este cupom atingiu o limite máximo de usos ou expirou');
+        }
+      }
+
       return tx.order.create({
         data: {
           userId: user.id,
           addressId: address.id,
           totalAmount: amountCents / 100,
+          discountAmount: discountCents / 100,
           shippingAmount: shippingCents / 100,
+          couponId: coupon ? coupon.id : null,
           expiresAt: new Date(Date.now() + ORDER_EXPIRATION_MS),
           items: { create: orderItems },
         },
@@ -153,7 +201,7 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
         { idempotencyKey: `pi_order_${order.id}` }
       );
     } catch (stripeErr) {
-      // Compensa a reserva caso a criação do PaymentIntent na Stripe falhe
+      // Compensa a reserva de estoque e uso do cupom caso a criação do PaymentIntent na Stripe falhe
       await prisma.$transaction(async (tx) => {
         const cancelled = await tx.order.updateMany({
           where: { id: order.id, status: 'PENDING', paymentStatus: 'PENDING' },
@@ -164,6 +212,12 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
             await tx.product.update({
               where: { id: item.productId },
               data: { stock: { increment: item.quantity } },
+            });
+          }
+          if (order.couponId) {
+            await tx.coupon.updateMany({
+              where: { id: order.couponId, usedCount: { gt: 0 } },
+              data: { usedCount: { decrement: 1 } },
             });
           }
         }
@@ -179,13 +233,14 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
         clientSecret: paymentIntent.client_secret,
         orderId: order.id,
         amount: amountCents / 100,
+        discountAmount: discountCents / 100,
       },
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ success: false, message: error.errors[0].message });
     }
-    if (error instanceof InsufficientStockError) {
+    if (error instanceof InsufficientStockError || error instanceof CouponLimitError) {
       return res.status(409).json({ success: false, message: error.message });
     }
     console.error('create-payment-intent error:', error);
@@ -242,7 +297,7 @@ export async function handlePaymentSucceeded(pi: Stripe.PaymentIntent) {
 }
 
 /**
- * Marca o pagamento como REJECTED, cancela o pedido pendente e devolve o estoque reservado
+ * Marca o pagamento como REJECTED, cancela o pedido pendente e devolve o estoque e o uso do cupom
  * uma única vez (idempotente via updateMany condicional).
  */
 export async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
@@ -271,6 +326,13 @@ export async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
       await tx.product.update({
         where: { id: item.productId },
         data: { stock: { increment: item.quantity } },
+      });
+    }
+
+    if (order.couponId) {
+      await tx.coupon.updateMany({
+        where: { id: order.couponId, usedCount: { gt: 0 } },
+        data: { usedCount: { decrement: 1 } },
       });
     }
   });

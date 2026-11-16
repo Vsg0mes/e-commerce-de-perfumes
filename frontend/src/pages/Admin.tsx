@@ -19,6 +19,7 @@ import { AdminOrders } from '../components/admin/AdminOrders';
 import { AdminDashboard } from '../components/admin/AdminDashboard';
 import { AdminBrandsCategories, type CatalogEntity } from '../components/admin/AdminBrandsCategories';
 import { AdminCustomers } from '../components/admin/AdminCustomers';
+import { AdminCoupons } from '../components/admin/AdminCoupons';
 import { formatBRL, type Pagination } from '../lib/orderStatus';
 
 const emptyForm = {
@@ -353,7 +354,7 @@ function Accordion({ title, icon, open, onToggle, children }: AccordionProps) {
   );
 }
 
-type AdminTab = 'dashboard' | 'products' | 'catalog' | 'orders' | 'customers';
+type AdminTab = 'dashboard' | 'products' | 'catalog' | 'coupons' | 'orders' | 'customers';
 
 export function Admin() {
   const { token, user } = useAuthStore();
@@ -678,6 +679,7 @@ export function Admin() {
     ['dashboard', 'Resumo'],
     ['products', 'Produtos'],
     ['catalog', 'Marcas e Categorias'],
+    ['coupons', 'Cupons'],
     ['orders', 'Pedidos'],
     ['customers', 'Clientes'],
   ];
@@ -738,6 +740,8 @@ export function Admin() {
       {tab === 'orders' && <AdminOrders onMessage={setMessage} />}
 
       {tab === 'customers' && <AdminCustomers />}
+
+      {tab === 'coupons' && <AdminCoupons onMessage={setMessage} />}
 
       {tab === 'catalog' && (
         <AdminBrandsCategories

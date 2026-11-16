@@ -160,6 +160,12 @@ export function Orders() {
                   </div>
                   <dl className="space-y-1 sm:text-right text-gray-600 dark:text-gray-300">
                     <div className="flex sm:justify-end gap-4"><dt>Subtotal</dt><dd className="w-28 text-right">{formatBRL(subtotal)}</dd></div>
+                    {Number(order.discountAmount ?? 0) > 0 && (
+                      <div className="flex sm:justify-end gap-4 text-emerald-600 dark:text-emerald-400">
+                        <dt>Desconto{order.coupon?.code ? ` (${order.coupon.code})` : ''}</dt>
+                        <dd className="w-28 text-right">-{formatBRL(Number(order.discountAmount))}</dd>
+                      </div>
+                    )}
                     <div className="flex sm:justify-end gap-4"><dt>Frete</dt><dd className="w-28 text-right">{formatBRL(order.shippingAmount)}</dd></div>
                     <div className="flex sm:justify-end gap-4 font-bold text-gray-900 dark:text-gray-100"><dt>Total</dt><dd className="w-28 text-right">{formatBRL(order.totalAmount)}</dd></div>
                   </dl>

@@ -15,6 +15,9 @@ const customerSelect = { id: true, name: true, email: true, phone: true } as con
 const itemsInclude = {
   include: { product: { select: { id: true, name: true, image: true, volume: true } } },
 } as const;
+const couponSelect = {
+  select: { id: true, code: true, discountType: true, discountValue: true },
+} as const;
 
 /**
  * Aplica no banco a transição para reembolsado (status CANCELLED, paymentStatus REFUNDED)
@@ -53,6 +56,12 @@ export async function applyOrderRefundInDb(orderId: string): Promise<boolean> {
           data: { stock: { increment: item.quantity } },
         });
       }
+      if (order.couponId) {
+        await tx.coupon.updateMany({
+          where: { id: order.couponId, usedCount: { gt: 0 } },
+          data: { usedCount: { decrement: 1 } },
+        });
+      }
       return true;
     }
 
@@ -89,6 +98,7 @@ export const getOrder = async (req: AuthRequest, res: Response) => {
       include: {
         items: { include: { product: true } },
         address: true,
+        coupon: couponSelect,
         user: { select: customerSelect },
       },
     });
@@ -231,6 +241,12 @@ export const cancelMyOrder = async (req: AuthRequest, res: Response) => {
           data: { stock: { increment: item.quantity } },
         });
       }
+      if (order.couponId) {
+        await tx.coupon.updateMany({
+          where: { id: order.couponId, usedCount: { gt: 0 } },
+          data: { usedCount: { decrement: 1 } },
+        });
+      }
       return true;
     });
 
@@ -248,6 +264,7 @@ export const cancelMyOrder = async (req: AuthRequest, res: Response) => {
       include: {
         items: { include: { product: true } },
         address: true,
+        coupon: couponSelect,
         user: { select: customerSelect },
       },
     });
@@ -294,7 +311,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { items: itemsInclude, address: true },
+        include: { items: itemsInclude, address: true, coupon: couponSelect },
       }),
       prisma.order.count({ where }),
     ]);
@@ -339,7 +356,7 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
         orderBy: { createdAt: sort },
         skip: (page - 1) * limit,
         take: limit,
-        include: { items: itemsInclude, address: true, user: { select: customerSelect } },
+        include: { items: itemsInclude, address: true, coupon: couponSelect, user: { select: customerSelect } },
       }),
       prisma.order.count({ where }),
     ]);
@@ -608,6 +625,12 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
             data: { stock: { increment: item.quantity } },
           });
         }
+        if (order.couponId) {
+          await tx.coupon.updateMany({
+            where: { id: order.couponId, usedCount: { gt: 0 } },
+            data: { usedCount: { decrement: 1 } },
+          });
+        }
         return true;
       });
 
@@ -639,7 +662,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
 
     const updated = await prisma.order.findUnique({
       where: { id },
-      include: { items: itemsInclude, address: true, user: { select: customerSelect } },
+      include: { items: itemsInclude, address: true, coupon: couponSelect, user: { select: customerSelect } },
     });
     res.json({ success: true, message: 'Status do pedido atualizado', data: updated });
   } catch (error) {

@@ -55,6 +55,13 @@ export async function expirePendingOrders(now: Date = new Date()): Promise<numbe
         });
       }
 
+      if (order.couponId) {
+        await tx.coupon.updateMany({
+          where: { id: order.couponId, usedCount: { gt: 0 } },
+          data: { usedCount: { decrement: 1 } },
+        });
+      }
+
       return true;
     });
 

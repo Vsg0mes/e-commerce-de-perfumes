@@ -81,6 +81,7 @@ export interface OrderData {
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   totalAmount: number;
+  discountAmount?: number;
   shippingAmount: number;
   trackingCode: string | null;
   createdAt: string;
@@ -89,6 +90,7 @@ export interface OrderData {
   cancelledAt: string | null;
   expiresAt?: string | null;
   needsManualReview?: boolean;
+  coupon?: { id: string; code: string; discountType: string; discountValue: number } | null;
   items: OrderItemData[];
   address: OrderAddress;
   user?: { id: string; name: string; email: string; phone: string | null };

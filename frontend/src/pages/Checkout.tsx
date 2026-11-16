@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Elements } from '@stripe/react-stripe-js';
-import { AlertTriangle, MapPin } from 'lucide-react';
+import { AlertTriangle, MapPin, Ticket, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { stripePromise, stripeAppearance } from '../lib/stripe';
@@ -45,6 +45,16 @@ export function Checkout() {
     maxDays: number;
   } | null>(null);
   const [shippingError, setShippingError] = useState<string | null>(null);
+
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountType: string;
+    discountValue: number;
+    discountAmount: number;
+  } | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -223,6 +233,30 @@ export function Checkout() {
     Boolean(shipping?.state && formData.state) &&
     formData.state.toUpperCase() !== shipping!.state;
 
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code || couponLoading) return;
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
+      const res = await axios.post(
+        `${apiBase}/coupons/validate`,
+        { code, subtotal: getTotal() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAppliedCoupon(res.data.data);
+      setCouponInput('');
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(
+        (axios.isAxiosError(err) && err.response?.data?.message) || 'Cupom inválido ou expirado.'
+      );
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
@@ -257,6 +291,7 @@ export function Checkout() {
             zipCode: formData.zipCode.replace(/\D/g, ''),
             state: formData.state.toUpperCase(),
           },
+          ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -631,12 +666,65 @@ export function Checkout() {
           </ul>
 
           <dl className="space-y-4 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800 pt-6">
+            {/* Campo de Cupom de Desconto */}
+            <div className="pb-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Cupom de Desconto
+              </label>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                  <span className="flex items-center gap-1.5 font-mono font-semibold">
+                    <Ticket size={14} /> {appliedCoupon.code} (-
+                    {formatPrice(appliedCoupon.discountAmount)})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedCoupon(null);
+                      setClientSecret(null);
+                    }}
+                    className="text-emerald-700 dark:text-emerald-300 hover:text-red-500"
+                    title="Remover cupom"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Ex: BEMVINDO10"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    disabled={Boolean(clientSecret)}
+                    className="flex-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-xs uppercase font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    disabled={couponLoading || !couponInput.trim() || Boolean(clientSecret)}
+                    className="px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {couponLoading ? '...' : 'Aplicar'}
+                  </button>
+                </div>
+              )}
+              {couponError && <p className="mt-1 text-xs text-red-500">{couponError}</p>}
+            </div>
+
             <div className="flex justify-between">
               <dt>Subtotal</dt>
               <dd className="font-medium text-gray-900 dark:text-gray-100">
                 {formatPrice(getTotal())}
               </dd>
             </div>
+
+            {appliedCoupon && appliedCoupon.discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                <dt>Desconto ({appliedCoupon.code})</dt>
+                <dd className="font-medium">-{formatPrice(appliedCoupon.discountAmount)}</dd>
+              </div>
+            )}
 
             <div className="flex justify-between">
               <dt>
@@ -661,7 +749,10 @@ export function Checkout() {
                 Total a Pagar
               </dt>
               <dd className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                {shipping ? formatPrice(getTotal() + shipping.amount) : formatPrice(getTotal())}
+                {formatPrice(
+                  Math.max(0, getTotal() - (appliedCoupon?.discountAmount ?? 0)) +
+                    (shipping?.amount ?? 0)
+                )}
               </dd>
             </div>
           </dl>
