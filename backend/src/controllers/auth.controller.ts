@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import prisma from '../prisma';
 import { generateToken } from '../utils/jwt';
 import { sendPasswordResetEmail } from '../services/mailer';
+import { isValidCpf } from '../utils/cpf';
 import { z } from 'zod';
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hora
@@ -16,7 +17,10 @@ const registerSchema = z.object({
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
   phone: z.string().optional(),
-  cpf: z.string().optional(),
+  cpf: z
+    .string()
+    .optional()
+    .refine((v) => !v || isValidCpf(v), { message: 'CPF inválido' }),
 });
 
 export const register = async (req: Request, res: Response) => {

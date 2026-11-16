@@ -107,6 +107,162 @@ export const getOrder = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * POST /api/orders/:id/payment-intent
+ * Permite ao cliente dono do pedido retomar o pagamento de um pedido PENDING ainda não expirado,
+ * reutilizando o PaymentIntent existente na Stripe.
+ */
+export const resumeOrderPayment = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { user: { select: { email: true } } },
+    });
+
+    if (!order || order.userId !== req.user!.id) {
+      return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
+    }
+
+    if (order.status !== 'PENDING' || order.paymentStatus !== 'PENDING') {
+      return res.status(409).json({
+        success: false,
+        message: 'Este pedido não está mais aguardando pagamento',
+      });
+    }
+
+    const now = new Date();
+    if (order.expiresAt && order.expiresAt <= now) {
+      return res.status(409).json({
+        success: false,
+        message: 'O prazo de pagamento deste pedido expirou',
+      });
+    }
+
+    const amountCents = Math.round(order.totalAmount * 100);
+    let clientSecret: string | null = null;
+
+    if (order.paymentId) {
+      try {
+        const existingPi = await stripe.paymentIntents.retrieve(order.paymentId);
+        if (
+          existingPi.status !== 'canceled' &&
+          existingPi.status !== 'succeeded' &&
+          existingPi.client_secret
+        ) {
+          clientSecret = existingPi.client_secret;
+        }
+      } catch {
+        // Caso não seja possível recuperar, cria um novo abaixo
+      }
+    }
+
+    if (!clientSecret) {
+      const pi = await stripe.paymentIntents.create(
+        {
+          amount: amountCents,
+          currency: 'brl',
+          automatic_payment_methods: { enabled: true },
+          receipt_email: order.user.email,
+          metadata: { orderId: order.id },
+        },
+        { idempotencyKey: `pi_resume_${order.id}_${order.updatedAt.getTime()}` }
+      );
+      await prisma.order.update({ where: { id: order.id }, data: { paymentId: pi.id } });
+      clientSecret = pi.client_secret;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        clientSecret,
+        orderId: order.id,
+        amount: order.totalAmount,
+      },
+    });
+  } catch (error) {
+    console.error('Error resuming order payment:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao retomar pagamento do pedido' });
+  }
+};
+
+/**
+ * POST /api/orders/:id/cancel
+ * Permite ao cliente dono do pedido cancelar um pedido PENDING, devolvendo o estoque reservado.
+ */
+export const cancelMyOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order || order.userId !== req.user!.id) {
+      return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
+    }
+
+    if (order.status !== 'PENDING' || order.paymentStatus !== 'PENDING') {
+      return res.status(409).json({
+        success: false,
+        message: 'Apenas pedidos aguardando pagamento podem ser cancelados',
+      });
+    }
+
+    if (order.paymentId) {
+      try {
+        await stripe.paymentIntents.cancel(order.paymentId);
+      } catch {
+        // Ignora erro se já estiver cancelado/finalizado na Stripe
+      }
+    }
+
+    const now = new Date();
+    const cancelled = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id, status: 'PENDING', paymentStatus: 'PENDING' },
+        data: { status: 'CANCELLED', paymentStatus: 'CANCELLED', cancelledAt: now },
+      });
+      if (updated.count === 0) return false;
+
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+      return true;
+    });
+
+    if (!cancelled) {
+      return res.status(409).json({
+        success: false,
+        message: 'O pedido foi alterado por outra operação. Recarregue a página.',
+      });
+    }
+
+    await sendOrderCancelledEmail(id);
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id },
+      include: {
+        items: { include: { product: true } },
+        address: true,
+        user: { select: customerSelect },
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Pedido cancelado com sucesso',
+      data: updatedOrder,
+    });
+  } catch (error) {
+    console.error('Error cancelling customer order:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Meus Pedidos / Admin
 // ---------------------------------------------------------------------------

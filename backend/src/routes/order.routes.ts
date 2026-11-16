@@ -7,6 +7,8 @@ import {
   exportAdminOrdersCsv,
   updateOrderStatus,
   refundOrder,
+  resumeOrderPayment,
+  cancelMyOrder,
 } from '../controllers/order.controller';
 
 const router = Router();
@@ -17,6 +19,8 @@ router.get('/admin/export', authenticate, authorizeAdmin, exportAdminOrdersCsv);
 router.get('/admin', authenticate, authorizeAdmin, getAdminOrders);
 
 router.get('/:id', authenticate, getOrder);
+router.post('/:id/payment-intent', authenticate, resumeOrderPayment);
+router.post('/:id/cancel', authenticate, cancelMyOrder);
 router.patch('/:id/status', authenticate, authorizeAdmin, updateOrderStatus);
 router.post('/:id/refund', authenticate, authorizeAdmin, refundOrder);
 

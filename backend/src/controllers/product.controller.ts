@@ -17,7 +17,9 @@ export const getProducts = async (req: Request, res: Response) => {
     if (category) filter.category = { name: String(category) };
     if (brand) filter.brand = { name: String(brand) };
     if (gender) filter.gender = String(gender);
-    if (olfactoryFamily) filter.olfactoryFamily = String(olfactoryFamily);
+    if (olfactoryFamily) {
+      filter.olfactoryFamily = { contains: String(olfactoryFamily), mode: 'insensitive' };
+    }
     if (search) {
       filter.name = { contains: String(search), mode: 'insensitive' };
     }
@@ -163,6 +165,24 @@ export const getCategories = async (_req: Request, res: Response) => {
     res.json({ success: true, data: categories });
   } catch (error) {
     console.error('Error fetching categories:', error);
+    res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+  }
+};
+
+export const getOlfactoryFamilies = async (_req: Request, res: Response) => {
+  try {
+    const rows = await prisma.product.findMany({
+      where: { isActive: true, olfactoryFamily: { not: null } },
+      select: { olfactoryFamily: true },
+      distinct: ['olfactoryFamily'],
+      orderBy: { olfactoryFamily: 'asc' },
+    });
+    const families = rows
+      .map((r) => r.olfactoryFamily?.trim())
+      .filter((v): v is string => Boolean(v));
+    res.json({ success: true, data: families });
+  } catch (error) {
+    console.error('Error fetching olfactory families:', error);
     res.status(500).json({ success: false, message: 'Erro interno no servidor' });
   }
 };

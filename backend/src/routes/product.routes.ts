@@ -8,6 +8,7 @@ import {
   updateBrand,
   deleteBrand,
   getCategories,
+  getOlfactoryFamilies,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -25,6 +26,7 @@ const router = Router();
 router.get('/', getProducts);
 router.get('/brands', getBrands);
 router.get('/categories', getCategories);
+router.get('/olfactory-families', getOlfactoryFamilies);
 
 // Rotas administrativas fixas ANTES de '/:id'
 router.get('/admin', authenticate, authorizeAdmin, getAdminProducts);

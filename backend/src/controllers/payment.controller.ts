@@ -8,6 +8,7 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { calculateShipping } from '../utils/shipping';
 import { applyOrderRefundInDb } from './order.controller';
 import { sendOrderConfirmedEmail } from '../services/mailer';
+import { isValidCpf } from '../utils/cpf';
 
 const ORDER_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutos
 
@@ -61,10 +62,24 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
     }
     const sortedProductIds = [...qtyByProduct.keys()].sort();
 
+    // Valida CPF (dígitos verificadores)
+    if (!isValidCpf(data.customerInfo.cpf)) {
+      return res.status(400).json({ success: false, message: 'CPF inválido' });
+    }
+
     // Frete calculado no servidor a partir do CEP (nunca aceito do cliente)
     const shipping = calculateShipping(data.customerInfo.zipCode);
     if (!shipping) {
       return res.status(400).json({ success: false, message: 'CEP inválido ou fora da área de entrega' });
+    }
+
+    // Garante que a UF informada corresponde à faixa do CEP
+    const informedState = data.customerInfo.state.trim().toUpperCase();
+    if (informedState !== shipping.state) {
+      return res.status(400).json({
+        success: false,
+        message: `O estado informado (${informedState}) não corresponde ao CEP (${shipping.state})`,
+      });
     }
 
     // Compra permitida apenas para usuários autenticados (rota protegida por `authenticate`)
