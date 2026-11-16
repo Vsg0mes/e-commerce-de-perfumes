@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorizeAdmin } from '../middlewares/auth.middleware';
 import {
-  createOrder,
   getOrder,
   getMyOrders,
   getAdminOrders,
@@ -9,8 +8,6 @@ import {
 } from '../controllers/order.controller';
 
 const router = Router();
-
-router.post('/', authenticate, createOrder);
 
 // Rotas fixas ANTES de '/:id'
 router.get('/mine', authenticate, getMyOrders);
