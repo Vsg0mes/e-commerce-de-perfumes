@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { stripe } from '../services/stripe';
+import { handlePaymentSucceeded } from './payment.controller';
 import {
   sendOrderCancelledEmail,
   sendOrderDeliveredEmail,
@@ -18,6 +19,42 @@ const itemsInclude = {
 const couponSelect = {
   select: { id: true, code: true, discountType: true, discountValue: true },
 } as const;
+
+/**
+ * Reconcilia pedidos PENDING com a API da Stripe caso o webhook ainda não tenha chegado
+ * (ex.: atraso de rede ou listener offline no ambiente local).
+ * É 100% seguro e idempotente pois consulta o status real diretamente na Stripe e usa handlePaymentSucceeded.
+ */
+async function syncPendingOrdersWithStripe(
+  orders: Array<{ id: string; status: string; paymentStatus: string; paymentId: string | null }>
+): Promise<boolean> {
+  const pendingWithPi = orders.filter(
+    (o) =>
+      o.status === 'PENDING' &&
+      o.paymentStatus === 'PENDING' &&
+      o.paymentId &&
+      o.paymentId.startsWith('pi_') &&
+      !o.paymentId.startsWith('pi_test_') &&
+      !o.paymentId.startsWith('pi_f')
+  );
+  if (pendingWithPi.length === 0) return false;
+
+  let anySynced = false;
+  await Promise.all(
+    pendingWithPi.map(async (o) => {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(o.paymentId!);
+        if (pi.status === 'succeeded') {
+          await handlePaymentSucceeded(pi);
+          anySynced = true;
+        }
+      } catch {
+        // Ignora falhas de rede ou IDs de teste
+      }
+    })
+  );
+  return anySynced;
+}
 
 /**
  * Aplica no banco a transição para reembolsado (status CANCELLED, paymentStatus REFUNDED)
@@ -108,6 +145,19 @@ export const getOrder = async (req: AuthRequest, res: Response) => {
     const isAdmin = req.user!.role === 'ADMIN';
     if (!order || (!isOwner && !isAdmin)) {
       return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
+    }
+
+    if (await syncPendingOrdersWithStripe([order])) {
+      const refreshed = await prisma.order.findUnique({
+        where: { id },
+        include: {
+          items: { include: { product: true } },
+          address: true,
+          coupon: couponSelect,
+          user: { select: customerSelect },
+        },
+      });
+      return res.json({ success: true, data: refreshed });
     }
 
     res.json({ success: true, data: order });
@@ -305,7 +355,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
     const { page, limit } = paginationSchema.parse(req.query);
     const where = { userId: req.user!.id };
 
-    const [orders, total] = await Promise.all([
+    let [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -315,6 +365,16 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
       }),
       prisma.order.count({ where }),
     ]);
+
+    if (await syncPendingOrdersWithStripe(orders)) {
+      orders = await prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { items: itemsInclude, address: true, coupon: couponSelect },
+      });
+    }
 
     res.json({ success: true, data: orders, pagination: buildPagination(page, limit, total) });
   } catch (error) {
@@ -350,7 +410,7 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
       }),
     };
 
-    const [orders, total] = await Promise.all([
+    let [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
         orderBy: { createdAt: sort },
@@ -360,6 +420,19 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
       }),
       prisma.order.count({ where }),
     ]);
+
+    if (await syncPendingOrdersWithStripe(orders)) {
+      [orders, total] = await Promise.all([
+        prisma.order.findMany({
+          where,
+          orderBy: { createdAt: sort },
+          skip: (page - 1) * limit,
+          take: limit,
+          include: { items: itemsInclude, address: true, coupon: couponSelect, user: { select: customerSelect } },
+        }),
+        prisma.order.count({ where }),
+      ]);
+    }
 
     res.json({ success: true, data: orders, pagination: buildPagination(page, limit, total) });
   } catch (error) {

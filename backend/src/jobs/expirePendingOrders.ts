@@ -1,6 +1,7 @@
 import prisma from '../prisma';
 import { stripe } from '../services/stripe';
 import { sendOrderCancelledEmail } from '../services/mailer';
+import { handlePaymentSucceeded } from '../controllers/payment.controller';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -23,6 +24,16 @@ export async function expirePendingOrders(now: Date = new Date()): Promise<numbe
 
   for (const order of expiredOrders) {
     if (order.paymentId) {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(order.paymentId);
+        if (pi.status === 'succeeded') {
+          await handlePaymentSucceeded(pi);
+          continue;
+        }
+      } catch {
+        // Segue para tentativa de cancelamento caso retrieve não esteja disponível
+      }
+
       try {
         await stripe.paymentIntents.cancel(order.paymentId);
       } catch {
