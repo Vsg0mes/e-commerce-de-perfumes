@@ -2,7 +2,11 @@ import { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import prisma from '../prisma';
-import { stripe } from '../services/stripe';
+import {
+  createOrderPaymentIntent,
+  getOrderExpirationMinutes,
+  stripe,
+} from '../services/stripe';
 import { saveUserAddress, saveUserContact } from '../utils/address';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { calculateShipping } from '../utils/shipping';
@@ -13,8 +17,6 @@ import {
   calculateCouponDiscountCents,
   getCouponValidationError,
 } from './coupon.controller';
-
-const ORDER_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutos
 
 class InsufficientStockError extends Error {
   constructor(public productName: string) {
@@ -143,7 +145,10 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
     const address = await saveUserAddress(user.id, c);
     await saveUserContact(user.id, c.cpf, c.phone);
 
-    // Reserva atômica de estoque + uso do cupom + criação do pedido PENDING com expiração de 30 min
+    const expirationMs = getOrderExpirationMinutes() * 60 * 1000;
+    const orderExpiresAt = new Date(Date.now() + expirationMs);
+
+    // Reserva atômica de estoque + uso do cupom + criação do pedido PENDING com expiração configurável
     const order = await prisma.$transaction(async (tx) => {
       for (const productId of sortedProductIds) {
         const product = productById.get(productId)!;
@@ -182,7 +187,7 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
           discountAmount: discountCents / 100,
           shippingAmount: shippingCents / 100,
           couponId: coupon ? coupon.id : null,
-          expiresAt: new Date(Date.now() + ORDER_EXPIRATION_MS),
+          expiresAt: orderExpiresAt,
           items: { create: orderItems },
         },
       });
@@ -190,16 +195,13 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
 
     let paymentIntent: Stripe.PaymentIntent;
     try {
-      paymentIntent = await stripe.paymentIntents.create(
-        {
-          amount: amountCents,
-          currency: 'brl',
-          automatic_payment_methods: { enabled: true },
-          receipt_email: user.email,
-          metadata: { orderId: order.id },
-        },
-        { idempotencyKey: `pi_order_${order.id}` }
-      );
+      paymentIntent = await createOrderPaymentIntent({
+        orderId: order.id,
+        amountCents,
+        email: user.email,
+        expiresAt: order.expiresAt ?? orderExpiresAt,
+        idempotencyKey: `pi_order_${order.id}`,
+      });
     } catch (stripeErr) {
       // Compensa a reserva de estoque e uso do cupom caso a criação do PaymentIntent na Stripe falhe
       await prisma.$transaction(async (tx) => {
@@ -234,6 +236,7 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
         orderId: order.id,
         amount: amountCents / 100,
         discountAmount: discountCents / 100,
+        expiresAt: (order.expiresAt ?? orderExpiresAt).toISOString(),
       },
     });
   } catch (error) {

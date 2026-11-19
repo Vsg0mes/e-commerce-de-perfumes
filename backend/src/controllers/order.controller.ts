@@ -3,7 +3,11 @@ import prisma from '../prisma';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { stripe } from '../services/stripe';
+import {
+  createOrderPaymentIntent,
+  getOrderExpirationMinutes,
+  stripe,
+} from '../services/stripe';
 import { handlePaymentSucceeded } from './payment.controller';
 import {
   sendOrderCancelledEmail,
@@ -218,16 +222,15 @@ export const resumeOrderPayment = async (req: AuthRequest, res: Response) => {
     }
 
     if (!clientSecret) {
-      const pi = await stripe.paymentIntents.create(
-        {
-          amount: amountCents,
-          currency: 'brl',
-          automatic_payment_methods: { enabled: true },
-          receipt_email: order.user.email,
-          metadata: { orderId: order.id },
-        },
-        { idempotencyKey: `pi_resume_${order.id}_${order.updatedAt.getTime()}` }
-      );
+      const effectiveExpiresAt =
+        order.expiresAt ?? new Date(Date.now() + getOrderExpirationMinutes() * 60 * 1000);
+      const pi = await createOrderPaymentIntent({
+        orderId: order.id,
+        amountCents,
+        email: order.user.email,
+        expiresAt: effectiveExpiresAt,
+        idempotencyKey: `pi_resume_${order.id}_${order.updatedAt.getTime()}`,
+      });
       await prisma.order.update({ where: { id: order.id }, data: { paymentId: pi.id } });
       clientSecret = pi.client_secret;
     }
@@ -238,6 +241,7 @@ export const resumeOrderPayment = async (req: AuthRequest, res: Response) => {
         clientSecret,
         orderId: order.id,
         amount: Number(order.totalAmount),
+        expiresAt: order.expiresAt ? order.expiresAt.toISOString() : null,
       },
     });
   } catch (error) {

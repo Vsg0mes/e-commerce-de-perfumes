@@ -27,6 +27,8 @@ export function Checkout() {
 
   const [loading, setLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [orderExpiresAt, setOrderExpiresAt] = useState<string | null>(null);
   const [serverAmount, setServerAmount] = useState<number | null>(null);
   const [paid, setPaid] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -299,6 +301,8 @@ export function Checkout() {
 
       if (res.data.success) {
         setClientSecret(res.data.data.clientSecret);
+        setOrderId(res.data.data.orderId);
+        setOrderExpiresAt(res.data.data.expiresAt ?? null);
         setServerAmount(res.data.data.amount);
       }
     } catch (error) {
@@ -379,9 +383,9 @@ export function Checkout() {
         <div className="lg:col-span-8">
           {clientSecret && stripePromise ? (
             <div className="bg-white dark:bg-luxury-surface p-6 rounded-lg shadow-sm border border-gray-200 dark:border-luxury-border">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  Pagamento
+                  Pagamento (Cartão de Crédito/Débito ou Pix)
                 </h2>
                 <button
                   type="button"
@@ -391,12 +395,17 @@ export function Checkout() {
                   Editar dados
                 </button>
               </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">
+                Aceitamos cartão e Pix. Seu pedido e o estoque dos itens já estão reservados até o prazo limite de pagamento.
+              </p>
               <Elements
                 stripe={stripePromise}
                 options={{ clientSecret, appearance: stripeAppearance, locale: 'pt-BR' }}
               >
                 <StripePaymentForm
                   amountLabel={formatPrice(serverAmount ?? 0)}
+                  orderId={orderId}
+                  expiresAt={orderExpiresAt}
                   onSuccess={handlePaymentSuccess}
                 />
               </Elements>
@@ -755,6 +764,9 @@ export function Checkout() {
                 )}
               </dd>
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 pt-2">
+              Formas de pagamento aceitas: <strong>Pix</strong> e <strong>Cartão</strong>. Ao continuar, seu pedido fica reservado até o prazo limite de pagamento.
+            </p>
           </dl>
         </div>
       </div>

@@ -33,6 +33,8 @@ cp .env.example .env
 | `STRIPE_SECRET_KEY` | Chave secreta da Stripe (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Segredo de assinatura do webhook da Stripe (`whsec_...`) |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Chave pública da Stripe (`pk_test_...`) para o frontend |
+| `STRIPE_PAYMENT_METHODS` | Lista separada por vírgula dos métodos de pagamento aceitos na Stripe (valores permitidos: `card`, `pix`; padrão: `card,pix`). Usa `payment_method_types` explícito em vez de `automatic_payment_methods` |
+| `ORDER_EXPIRATION_MINUTES` | Prazo em minutos para expiração da reserva de estoque de pedidos `PENDING` e do QR Code Pix (`payment_method_options.pix.expires_after_seconds`, sincronizado e limitado ao intervalo `[60, 1209600]` da Stripe; padrão: `60`) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Credenciais do admin inicial criado pelo seed (em dev, sem `ADMIN_PASSWORD`, uma senha aleatória é gerada e impressa uma única vez) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Configuração opcional de SMTP para envio de e-mails transacionais e redefinição de senha. Em desenvolvimento, sem `SMTP_HOST`, os e-mails são registrados no console |
 | `FRONTEND_URL`, `BACKEND_URL` | URL pública da aplicação (padrão `http://localhost:8080`) |
@@ -46,6 +48,16 @@ docker compose exec backend npm run prisma:seed
 ```
 
 Acesse a aplicação em **[http://localhost:8080](http://localhost:8080)**.
+
+## Como habilitar e testar Pix e Cartão na Stripe (Modo de Teste)
+
+1. **Habilitar Pix no Dashboard da Stripe:**
+   - Acesse **Settings → Payment methods** no Dashboard da Stripe (modo de teste) e ative **Pix** (moeda `BRL`).
+   - Defina `STRIPE_PAYMENT_METHODS=card,pix` e `ORDER_EXPIRATION_MINUTES=60` no `.env`. Caso sua conta Stripe de teste ainda não tenha Pix habilitado para `BRL`, use `STRIPE_PAYMENT_METHODS=card` (o backend também possui fallback automático para `['card']` caso a Stripe rejeite `pix` na criação do `PaymentIntent`).
+2. **Como simular pagamento ou falha de Pix no modo de teste:**
+   - No checkout, escolha a aba **Pix** no `PaymentElement` e clique em **Pagar**.
+   - A Stripe exibirá o QR Code de teste e um link/botão de simulação da própria Stripe para **Autorizar pagamento de teste** ou **Falhar pagamento de teste**.
+   - Caso feche o modal sem pagar (`requires_action`), você será redirecionado para `/orders/:id`, onde verá o prazo limite com contador regressivo, polling automático a cada 8s e o botão **"Pagar agora"** para reabrir o mesmo QR Code Pix.
 
 ## Como usar o Stripe CLI (Webhooks em Desenvolvimento)
 

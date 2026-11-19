@@ -1,10 +1,16 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock } from 'lucide-react';
+import { useCartStore } from '../store/cartStore';
+import { formatDate } from '../lib/orderStatus';
 
 interface Props {
   amountLabel: string;
+  orderId?: string | null;
+  expiresAt?: string | null;
   onSuccess: () => void;
+  onRequiresAction?: (message: string) => void;
 }
 
 // Mensagens amigáveis por decline_code / code (nunca exibir texto cru de erro técnico)
@@ -34,9 +40,17 @@ function friendlyError(error: { type?: string; code?: string; decline_code?: str
   }
 }
 
-export function StripePaymentForm({ amountLabel, onSuccess }: Props) {
+export function StripePaymentForm({
+  amountLabel,
+  orderId,
+  expiresAt,
+  onSuccess,
+  onRequiresAction,
+}: Props) {
   const stripe = useStripe();
   const elements = useElements();
+  const navigate = useNavigate();
+  const clearCart = useCartStore((s) => s.clearCart);
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,10 +63,14 @@ export function StripePaymentForm({ amountLabel, onSuccess }: Props) {
     setSubmitting(true);
     setErrorMessage(null);
 
+    const returnUrl = orderId
+      ? `${window.location.origin}/checkout/success?orderId=${encodeURIComponent(orderId)}`
+      : `${window.location.origin}/checkout/success`;
+
     // Os dados do cartão vão direto do iframe da Stripe para os servidores da Stripe.
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
-      confirmParams: { return_url: `${window.location.origin}/checkout/success` },
+      confirmParams: { return_url: returnUrl },
       redirect: 'if_required', // só redireciona se o método exigir (ex.: 3DS/bancário)
     });
 
@@ -64,6 +82,25 @@ export function StripePaymentForm({ amountLabel, onSuccess }: Props) {
 
     if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'processing') {
       onSuccess(); // a confirmação definitiva do pedido vem do webhook
+      return;
+    }
+
+    if (paymentIntent?.status === 'requires_action') {
+      const deadlineText = expiresAt ? formatDate(expiresAt) : 'o prazo do pedido';
+      const msg = `Pix gerado. Aguardando pagamento até ${deadlineText}. Você pode retomar o pagamento aqui.`;
+      clearCart();
+      setSubmitting(false);
+      if (onRequiresAction) {
+        onRequiresAction(msg);
+      } else if (orderId) {
+        navigate(`/orders/${orderId}`, { state: { pixPendingMessage: msg } });
+      }
+      return;
+    }
+
+    if (paymentIntent?.status === 'requires_payment_method') {
+      setErrorMessage('Pagamento não aprovado ou método recusado. Verifique os dados e tente novamente.');
+      setSubmitting(false);
       return;
     }
 
@@ -99,7 +136,7 @@ export function StripePaymentForm({ amountLabel, onSuccess }: Props) {
       </button>
 
       <p className="text-center text-xs text-luxury-textMuted">
-        Pagamento seguro processado pela Stripe. Não armazenamos os dados do seu cartão.
+        Pagamento seguro processado pela Stripe (Cartão ou Pix). Não armazenamos os dados do seu cartão.
       </p>
     </form>
   );

@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import prisma from '../prisma';
-import { stripe } from '../services/stripe';
+import {
+  calculatePixExpiresAfterSeconds,
+  createOrderPaymentIntent,
+  getConfiguredPaymentMethods,
+  stripe,
+} from '../services/stripe';
 import { calculateShipping } from '../utils/shipping';
 import {
   createPaymentIntent,
@@ -14,6 +19,7 @@ import {
   getAdminOrders,
   markOrderReviewed,
   refundOrder,
+  resumeOrderPayment,
   updateOrderStatus,
 } from '../controllers/order.controller';
 import { getAdminStats } from '../controllers/admin.controller';
@@ -660,5 +666,159 @@ describe('Fluxos críticos do E-commerce (Fase 6)', () => {
     );
     expect(resReview2.statusCode).toBe(200);
     expect(resReview2.body.data.needsManualReview).toBe(false);
+  });
+
+  it('8. Pix e Cartão: payment_method_types explícito, expires_after_seconds sincronizado, resumeOrderPayment e job expirePendingOrders seguro', async () => {
+    // 8.1 Configuração de métodos de pagamento e cálculo de expires_after_seconds
+    expect(getConfiguredPaymentMethods('card,pix')).toEqual(['card', 'pix']);
+    expect(getConfiguredPaymentMethods('card')).toEqual(['card']);
+    expect(getConfiguredPaymentMethods('pix,boleto,invalid')).toEqual(['pix']);
+
+    const baseNow = new Date('2026-11-19T12:00:00Z');
+    const in60Min = new Date(baseNow.getTime() + 60 * 60 * 1000);
+    expect(calculatePixExpiresAfterSeconds(in60Min, baseNow)).toBe(3600);
+    // Clamping no limite mínimo (60s) e máximo (14 dias = 1209600s) da Stripe
+    expect(calculatePixExpiresAfterSeconds(new Date(baseNow.getTime() + 10_000), baseNow)).toBe(60);
+    expect(
+      calculatePixExpiresAfterSeconds(new Date(baseNow.getTime() + 30 * 24 * 3600_000), baseNow)
+    ).toBe(1209600);
+
+    // Captura parâmetros enviados para stripe.paymentIntents.create
+    const createdParams: any[] = [];
+    const origCreate = (stripe.paymentIntents as any).create;
+    (stripe.paymentIntents as any).create = async (params: any) => {
+      createdParams.push(params);
+      return {
+        id: `pi_pix_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        client_secret: 'pi_pix_secret',
+        amount: params.amount,
+        status: 'requires_action',
+      };
+    };
+
+    const prevMethods = process.env.STRIPE_PAYMENT_METHODS;
+    process.env.STRIPE_PAYMENT_METHODS = 'card,pix';
+    await createOrderPaymentIntent({
+      orderId: 'order_pix_1',
+      amountCents: 15000,
+      email: 'pix@memorare.local',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      idempotencyKey: 'idem_pix_1',
+    });
+    expect(createdParams[0].payment_method_types).toEqual(['card', 'pix']);
+    expect(createdParams[0].automatic_payment_methods).toBeUndefined();
+    expect(createdParams[0].payment_method_options?.pix?.expires_after_seconds).toBeGreaterThanOrEqual(3590);
+    expect(createdParams[0].payment_method_options?.pix?.expires_after_seconds).toBeLessThanOrEqual(3600);
+
+    process.env.STRIPE_PAYMENT_METHODS = 'card';
+    await createOrderPaymentIntent({
+      orderId: 'order_card_only',
+      amountCents: 15000,
+      email: 'card@memorare.local',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      idempotencyKey: 'idem_card_1',
+    });
+    expect(createdParams[1].payment_method_types).toEqual(['card']);
+    expect(createdParams[1].payment_method_options).toBeUndefined();
+    process.env.STRIPE_PAYMENT_METHODS = prevMethods;
+
+    // 8.2 resumeOrderPayment reutiliza PaymentIntent em requires_action e cria novo quando canceled
+    const product = await createTestProduct(5, 100);
+    const resCreate = createMockRes();
+    await createPaymentIntent(
+      {
+        user: { id: testUserId, role: 'CUSTOMER' },
+        body: {
+          items: [{ productId: product.id, quantity: 1 }],
+          customerInfo: validCustomerInfo,
+        },
+      } as any,
+      resCreate
+    );
+    const orderId = resCreate.body.data.orderId;
+    createdOrderIds.push(orderId);
+    const initialOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const firstPiId = initialOrder.paymentId!;
+
+    const origRetrieve = (stripe.paymentIntents as any).retrieve;
+    (stripe.paymentIntents as any).retrieve = async (id: string) => ({
+      id,
+      status: 'requires_action',
+      client_secret: 'existing_pix_qr_secret',
+    });
+
+    const countBeforeReuse = createdParams.length;
+    const resResumeReuse = createMockRes();
+    await resumeOrderPayment(
+      { params: { id: orderId }, user: { id: testUserId, role: 'CUSTOMER' } } as any,
+      resResumeReuse
+    );
+    expect(resResumeReuse.statusCode).toBe(200);
+    expect(resResumeReuse.body.data.clientSecret).toBe('existing_pix_qr_secret');
+    expect(createdParams.length).toBe(countBeforeReuse); // reutilizou sem criar novo
+
+    // Quando o PI anterior está canceled, resumeOrderPayment cria um novo com createOrderPaymentIntent
+    (stripe.paymentIntents as any).retrieve = async (id: string) => ({
+      id,
+      status: 'canceled',
+      client_secret: 'old_canceled_secret',
+    });
+    const resResumeNew = createMockRes();
+    await resumeOrderPayment(
+      { params: { id: orderId }, user: { id: testUserId, role: 'CUSTOMER' } } as any,
+      resResumeNew
+    );
+    expect(resResumeNew.statusCode).toBe(200);
+    expect(resResumeNew.body.data.clientSecret).toBe('pi_pix_secret');
+    expect(createdParams.length).toBe(countBeforeReuse + 1);
+    const afterResumeOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(afterResumeOrder.paymentId).not.toBe(firstPiId);
+
+    // 8.3 expirePendingOrders NÃO expira nem devolve estoque se o cancelamento na Stripe falhar (ex.: PI em processing)
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const origCancel = (stripe.paymentIntents as any).cancel;
+    (stripe.paymentIntents as any).retrieve = async (id: string) => ({
+      id,
+      status: 'requires_action',
+    });
+    (stripe.paymentIntents as any).cancel = async () => {
+      throw new Error('Falha temporária ou PaymentIntent em processamento na Stripe');
+    };
+
+    const stockBeforeFailedExpire = (
+      await prisma.product.findUniqueOrThrow({ where: { id: product.id } })
+    ).stock;
+    await expirePendingOrders(new Date());
+
+    const orderStillPending = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const stockAfterFailedExpire = (
+      await prisma.product.findUniqueOrThrow({ where: { id: product.id } })
+    ).stock;
+    expect(orderStillPending.status).toBe('PENDING');
+    expect(stockAfterFailedExpire).toBe(stockBeforeFailedExpire);
+
+    // Quando a Stripe confirma o cancelamento do PaymentIntent (status 'canceled'), o job expira e devolve o estoque 1x
+    (stripe.paymentIntents as any).cancel = async (id: string) => ({
+      id,
+      status: 'canceled',
+    });
+    await expirePendingOrders(new Date());
+
+    const orderNowCancelled = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const stockAfterConfirmedCancel = (
+      await prisma.product.findUniqueOrThrow({ where: { id: product.id } })
+    ).stock;
+    expect(orderNowCancelled.status).toBe('CANCELLED');
+    expect(orderNowCancelled.paymentStatus).toBe('CANCELLED');
+    expect(stockAfterConfirmedCancel).toBe(stockBeforeFailedExpire + 1);
+
+    // Restaura stubs originais
+    (stripe.paymentIntents as any).create = origCreate;
+    (stripe.paymentIntents as any).retrieve = origRetrieve;
+    (stripe.paymentIntents as any).cancel = origCancel;
   });
 });

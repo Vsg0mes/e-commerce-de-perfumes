@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Elements } from '@stripe/react-stripe-js';
 import {
@@ -27,54 +27,104 @@ import {
   type OrderData,
 } from '../lib/orderStatus';
 
+function formatCountdown(remainingMs: number): string {
+  if (remainingMs <= 0) return '00:00';
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+  return `${pad(minutes)}:${pad(seconds)}`;
+}
+
 export function OrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { token, logout } = useAuthStore();
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(() => {
+    const stateMsg = (location.state as { pixPendingMessage?: string } | null)?.pixPendingMessage;
+    return stateMsg ? { type: 'success', text: stateMsg } : null;
+  });
 
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loadingPay, setLoadingPay] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
-  const fetchOrder = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await axios.get(`${apiBase}/orders/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setOrder(res.data.data);
-    } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 401) {
-        logout();
-        navigate('/login', { state: { from: `/orders/${id}` } });
-        return;
+  const fetchOrder = useCallback(
+    async (silent = false) => {
+      if (!id) return;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
       }
-      setError(
-        (axios.isAxiosError(err) && err.response?.data?.message) ||
-          'Não foi possível carregar os detalhes deste pedido.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [apiBase, id, token, logout, navigate]);
+      try {
+        const res = await axios.get(`${apiBase}/orders/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setOrder(res.data.data);
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 401) {
+          logout();
+          navigate('/login', { state: { from: `/orders/${id}` } });
+          return;
+        }
+        if (!silent) {
+          setError(
+            (axios.isAxiosError(err) && err.response?.data?.message) ||
+              'Não foi possível carregar os detalhes deste pedido.'
+          );
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [apiBase, id, token, logout, navigate]
+  );
 
   useEffect(() => {
-    fetchOrder();
+    fetchOrder(false);
   }, [fetchOrder]);
 
-  const isExpired = Boolean(
-    order?.expiresAt && new Date(order.expiresAt).getTime() <= Date.now()
-  );
-  const canPayOrCancel =
-    order?.status === 'PENDING' && order?.paymentStatus === 'PENDING' && !isExpired;
+  const expiresAtMs = order?.expiresAt ? new Date(order.expiresAt).getTime() : null;
+  const remainingMs = expiresAtMs !== null ? expiresAtMs - nowMs : null;
+  const isExpired = Boolean(remainingMs !== null && remainingMs <= 0);
+  const isPending = order?.status === 'PENDING' && order?.paymentStatus === 'PENDING';
+  const canPayOrCancel = Boolean(isPending && !isExpired);
+
+  // Contador regressivo de 1s enquanto o pedido estiver PENDING e não expirado
+  useEffect(() => {
+    if (!isPending || !expiresAtMs) return;
+    const interval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPending, expiresAtMs]);
+
+  // Polling silencioso de GET /api/orders/:id a cada 8s enquanto estiver PENDING e não expirado
+  useEffect(() => {
+    if (!isPending || isExpired) return;
+    const poll = setInterval(() => {
+      fetchOrder(true);
+    }, 8000);
+    return () => clearInterval(poll);
+  }, [isPending, isExpired, fetchOrder]);
+
+  // Quando o status do pedido muda de PENDING para PAID (ex.: webhook Pix aprovado), fecha o formulário de pagamento
+  useEffect(() => {
+    if (order && order.status !== 'PENDING' && clientSecret) {
+      setClientSecret(null);
+    }
+  }, [order, clientSecret]);
 
   const handlePayNow = async () => {
     if (!order || loadingPay) return;
@@ -94,7 +144,7 @@ export function OrderDetails() {
           (axios.isAxiosError(err) && err.response?.data?.message) ||
           'Não foi possível iniciar o pagamento.',
       });
-      fetchOrder();
+      fetchOrder(true);
     } finally {
       setLoadingPay(false);
     }
@@ -125,7 +175,7 @@ export function OrderDetails() {
           (axios.isAxiosError(err) && err.response?.data?.message) ||
           'Não foi possível cancelar o pedido.',
       });
-      fetchOrder();
+      fetchOrder(true);
     } finally {
       setCancelling(false);
     }
@@ -210,9 +260,19 @@ export function OrderDetails() {
             </p>
             {order.expiresAt && (
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Reserva garantida até {formatDate(order.expiresAt)}.
+                Prazo limite: <span className="font-semibold">{formatDate(order.expiresAt)}</span>
+                {remainingMs !== null && remainingMs > 0 && (
+                  <>
+                    {' '}
+                    · Tempo restante:{' '}
+                    <span className="font-mono font-bold">{formatCountdown(remainingMs)}</span>
+                  </>
+                )}
               </p>
             )}
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
+              Esta página atualiza automaticamente assim que o pagamento via Pix ou cartão for confirmado.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {!clientSecret && (
@@ -243,7 +303,7 @@ export function OrderDetails() {
         <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Concluir Pagamento
+              Concluir Pagamento (Cartão ou Pix)
             </h2>
             <button
               type="button"
@@ -259,13 +319,23 @@ export function OrderDetails() {
           >
             <StripePaymentForm
               amountLabel={formatBRL(order.totalAmount)}
+              orderId={order.id}
+              expiresAt={order.expiresAt}
               onSuccess={() => {
                 setClientSecret(null);
                 setActionMessage({
                   type: 'success',
                   text: 'Pagamento enviado com sucesso! Atualizando status do pedido...',
                 });
-                setTimeout(() => fetchOrder(), 1200);
+                setTimeout(() => fetchOrder(true), 1200);
+              }}
+              onRequiresAction={(msg) => {
+                setClientSecret(null);
+                setActionMessage({
+                  type: 'success',
+                  text: msg,
+                });
+                fetchOrder(true);
               }}
             />
           </Elements>
