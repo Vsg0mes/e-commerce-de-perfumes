@@ -361,6 +361,7 @@ export function Admin() {
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
 
   const [tab, setTab] = useState<AdminTab>('dashboard');
+  const [ordersManualReviewOnly, setOrdersManualReviewOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [brands, setBrands] = useState<CatalogEntity[]>([]);
   const [categories, setCategories] = useState<CatalogEntity[]>([]);
@@ -723,7 +724,10 @@ export function Admin() {
             key={key}
             role="tab"
             aria-selected={tab === key}
-            onClick={() => setTab(key)}
+            onClick={() => {
+              if (key === 'orders') setOrdersManualReviewOnly(false);
+              setTab(key);
+            }}
             className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === key
                 ? 'bg-indigo-600 text-white'
@@ -735,9 +739,18 @@ export function Admin() {
         ))}
       </div>
 
-      {tab === 'dashboard' && <AdminDashboard />}
+      {tab === 'dashboard' && (
+        <AdminDashboard
+          onOpenManualReviewOrders={() => {
+            setOrdersManualReviewOnly(true);
+            setTab('orders');
+          }}
+        />
+      )}
 
-      {tab === 'orders' && <AdminOrders onMessage={setMessage} />}
+      {tab === 'orders' && (
+        <AdminOrders onMessage={setMessage} initialManualReviewOnly={ordersManualReviewOnly} />
+      )}
 
       {tab === 'customers' && <AdminCustomers />}
 

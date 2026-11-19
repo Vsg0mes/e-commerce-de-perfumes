@@ -9,6 +9,7 @@ import {
   refundOrder,
   resumeOrderPayment,
   cancelMyOrder,
+  markOrderReviewed,
 } from '../controllers/order.controller';
 
 const router = Router();
@@ -22,6 +23,7 @@ router.get('/:id', authenticate, getOrder);
 router.post('/:id/payment-intent', authenticate, resumeOrderPayment);
 router.post('/:id/cancel', authenticate, cancelMyOrder);
 router.patch('/:id/status', authenticate, authorizeAdmin, updateOrderStatus);
+router.patch('/:id/review', authenticate, authorizeAdmin, markOrderReviewed);
 router.post('/:id/refund', authenticate, authorizeAdmin, refundOrder);
 
 export default router;

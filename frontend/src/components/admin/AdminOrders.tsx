@@ -1,6 +1,15 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { ChevronDown, ChevronRight, Download, RotateCcw, Search, Truck } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  RotateCcw,
+  Search,
+  Truck,
+} from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import {
   ADMIN_TRANSITIONS,
@@ -23,6 +32,8 @@ import {
 interface Props {
   /** Toast compartilhado com o painel (mesmo padrão do Admin). */
   onMessage: (msg: { type: 'success' | 'error'; text: string }) => void;
+  /** Quando true, inicia filtrando apenas pedidos com needsManualReview=true. */
+  initialManualReviewOnly?: boolean;
 }
 
 const LIMIT = 10;
@@ -32,7 +43,14 @@ const CONFIRM_TEXT: Partial<Record<OrderStatus, string>> = {
   DELIVERED: 'Marcar como entregue? Esta ação é irreversível.',
 };
 
-export function AdminOrders({ onMessage }: Props) {
+function getManualReviewReason(order: OrderData): string {
+  if (order.status === 'CANCELLED' && order.paymentStatus === 'APPROVED') {
+    return 'Pagamento aprovado após o pedido já ter sido cancelado/expirado (o estoque já havia sido devolvido). Reembolse o cliente ou verifique o estoque antes de tratar.';
+  }
+  return 'Reembolso parcial ou divergência financeira detectada na Stripe. O pedido e o estoque não foram cancelados automaticamente — revise no painel da Stripe e escolha como proceder.';
+}
+
+export function AdminOrders({ onMessage, initialManualReviewOnly = false }: Props) {
   const { token } = useAuthStore();
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
   const headers = { Authorization: `Bearer ${token}` };
@@ -43,6 +61,7 @@ export function AdminOrders({ onMessage }: Props) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<OrderStatus | ''>('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | ''>('');
+  const [onlyManualReview, setOnlyManualReview] = useState<boolean>(initialManualReviewOnly);
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<'desc' | 'asc'>('desc');
@@ -51,6 +70,11 @@ export function AdminOrders({ onMessage }: Props) {
   const [trackingCode, setTrackingCode] = useState('');
   const [updating, setUpdating] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    setOnlyManualReview(initialManualReviewOnly);
+    setPage(1);
+  }, [initialManualReviewOnly]);
 
   // Debounce da busca; volta para a página 1 ao mudar filtros
   useEffect(() => {
@@ -63,7 +87,15 @@ export function AdminOrders({ onMessage }: Props) {
     try {
       const res = await axios.get(`${apiBase}/orders/admin`, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page, limit: LIMIT, sort, ...(status && { status }), ...(paymentStatus && { paymentStatus }), ...(q && { q }) },
+        params: {
+          page,
+          limit: LIMIT,
+          sort,
+          ...(status && { status }),
+          ...(paymentStatus && { paymentStatus }),
+          ...(onlyManualReview && { needsManualReview: 'true' }),
+          ...(q && { q }),
+        },
       });
       setOrders(res.data.data);
       setPagination(res.data.pagination);
@@ -72,7 +104,7 @@ export function AdminOrders({ onMessage }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [apiBase, token, page, sort, status, paymentStatus, q, onMessage]);
+  }, [apiBase, token, page, sort, status, paymentStatus, onlyManualReview, q, onMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -122,6 +154,30 @@ export function AdminOrders({ onMessage }: Props) {
     }
   };
 
+  const handleMarkReviewed = async (order: OrderData) => {
+    if (updating === order.id) return;
+    setUpdating(order.id);
+    try {
+      const res = await axios.patch(`${apiBase}/orders/${order.id}/review`, {}, { headers });
+      setOrders(prev => {
+        const updated = prev.map(o => (o.id === order.id ? res.data.data : o));
+        return onlyManualReview ? updated.filter(o => o.needsManualReview) : updated;
+      });
+      onMessage({
+        type: 'success',
+        text: `Pedido ${shortOrderId(order.id)} marcado como revisado.`,
+      });
+    } catch (err) {
+      onMessage({
+        type: 'error',
+        text: (axios.isAxiosError(err) && err.response?.data?.message) || 'Erro ao marcar pedido como revisado.',
+      });
+      load();
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   const handleSelect = (order: OrderData, next: OrderStatus | '') => {
     if (!next) return;
     if (next === 'SHIPPED') {
@@ -158,6 +214,7 @@ export function AdminOrders({ onMessage }: Props) {
           sort,
           ...(status && { status }),
           ...(paymentStatus && { paymentStatus }),
+          ...(onlyManualReview && { needsManualReview: 'true' }),
           ...(q && { q }),
         },
         responseType: 'text',
@@ -207,6 +264,18 @@ export function AdminOrders({ onMessage }: Props) {
           <option value="desc">Mais recentes</option>
           <option value="asc">Mais antigos</option>
         </select>
+        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30 text-sm font-medium text-amber-800 dark:text-amber-200 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={onlyManualReview}
+            onChange={e => {
+              setOnlyManualReview(e.target.checked);
+              setPage(1);
+            }}
+            className="rounded text-amber-600 focus:ring-amber-500"
+          />
+          <span>Somente pedidos para revisão</span>
+        </label>
         <button
           type="button"
           onClick={handleExportCsv}
@@ -242,16 +311,30 @@ export function AdminOrders({ onMessage }: Props) {
             {orders.map(order => {
               const isOpen = expanded === order.id;
               const options = ADMIN_TRANSITIONS[order.status];
-              const canRefund = order.status === 'PAID' || order.status === 'PROCESSING';
+              const isLatePaidCancelled = order.status === 'CANCELLED' && order.paymentStatus === 'APPROVED';
+              const canRefund = order.status === 'PAID' || order.status === 'PROCESSING' || isLatePaidCancelled;
               return (
                 <Fragment key={order.id}>
-                  <tr className={loading ? 'opacity-60' : ''}>
+                  <tr className={`${loading ? 'opacity-60' : ''} ${order.needsManualReview ? 'bg-amber-50/40 dark:bg-amber-950/20' : ''}`}>
                     <td className="px-4 py-3">
                       <button onClick={() => setExpanded(isOpen ? null : order.id)} aria-label={isOpen ? 'Recolher detalhes' : 'Expandir detalhes'} aria-expanded={isOpen}>
                         {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       </button>
                     </td>
-                    <td className="px-4 py-3 font-mono font-semibold text-gray-900 dark:text-gray-100">{shortOrderId(order.id)}</td>
+                    <td className="px-4 py-3 font-mono font-semibold text-gray-900 dark:text-gray-100">
+                      <div className="flex items-center gap-2">
+                        <span>{shortOrderId(order.id)}</span>
+                        {order.needsManualReview && (
+                          <span
+                            title={getManualReviewReason(order)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-sans font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                          >
+                            <AlertTriangle size={12} />
+                            Revisar
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">{formatDate(order.createdAt)}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900 dark:text-gray-100">{order.user?.name}</div>
@@ -269,26 +352,28 @@ export function AdminOrders({ onMessage }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {options.length === 0 ? (
+                      {options.length === 0 && !canRefund && !order.needsManualReview ? (
                         <span className="text-xs text-gray-400">
                           {order.paymentStatus === 'REFUNDED' ? 'Cancelado e reembolsado' : 'Estado final'}
                         </span>
                       ) : (
                         <div className="flex flex-wrap items-center gap-2">
-                          <select
-                            value=""
-                            disabled={updating === order.id}
-                            onChange={e => handleSelect(order, e.target.value as OrderStatus | '')}
-                            className={fieldClass}
-                            aria-label={`Alterar status do pedido ${shortOrderId(order.id)}`}
-                          >
-                            <option value="">Alterar para…</option>
-                            {options.map(s => (
-                              <option key={s} value={s}>
-                                {s === 'CANCELLED' && canRefund ? 'Cancelar e reembolsar' : ORDER_STATUS_LABEL[s]}
-                              </option>
-                            ))}
-                          </select>
+                          {options.length > 0 && (
+                            <select
+                              value=""
+                              disabled={updating === order.id}
+                              onChange={e => handleSelect(order, e.target.value as OrderStatus | '')}
+                              className={fieldClass}
+                              aria-label={`Alterar status do pedido ${shortOrderId(order.id)}`}
+                            >
+                              <option value="">Alterar para…</option>
+                              {options.map(s => (
+                                <option key={s} value={s}>
+                                  {s === 'CANCELLED' && canRefund ? 'Cancelar e reembolsar' : ORDER_STATUS_LABEL[s]}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           {canRefund && (
                             <button
                               type="button"
@@ -300,6 +385,17 @@ export function AdminOrders({ onMessage }: Props) {
                               Cancelar e reembolsar
                             </button>
                           )}
+                          {order.needsManualReview && (
+                            <button
+                              type="button"
+                              disabled={updating === order.id}
+                              onClick={() => handleMarkReviewed(order)}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100/80 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 hover:bg-amber-200/80 dark:hover:bg-amber-900/60 disabled:opacity-50 transition-colors"
+                            >
+                              <CheckCircle2 size={14} />
+                              Marcar como revisado
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -307,6 +403,41 @@ export function AdminOrders({ onMessage }: Props) {
                   {isOpen && (
                     <tr className="bg-gray-50 dark:bg-gray-800/30">
                       <td colSpan={8} className="px-6 py-4 space-y-4">
+                        {order.needsManualReview && (
+                          <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-start gap-3 max-w-2xl">
+                              <AlertTriangle size={20} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                              <div className="text-sm">
+                                <p className="font-semibold">Atenção: este pedido requer revisão manual</p>
+                                <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                                  {getManualReviewReason(order)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {canRefund && (
+                                <button
+                                  type="button"
+                                  disabled={updating === order.id}
+                                  onClick={() => handleRefund(order)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
+                                >
+                                  <RotateCcw size={14} />
+                                  Cancelar e reembolsar
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={updating === order.id}
+                                onClick={() => handleMarkReviewed(order)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-amber-900 dark:text-amber-100 bg-amber-200 dark:bg-amber-900 hover:bg-amber-300 dark:hover:bg-amber-800 disabled:opacity-50 transition-colors"
+                              >
+                                <CheckCircle2 size={14} />
+                                Marcar como revisado
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         {shippingFor === order.id && (
                           <form
                             onSubmit={e => { e.preventDefault(); submitTracking(order); }}

@@ -10,9 +10,13 @@ import {
 } from '../controllers/payment.controller';
 import {
   cancelMyOrder,
+  exportAdminOrdersCsv,
+  getAdminOrders,
+  markOrderReviewed,
   refundOrder,
   updateOrderStatus,
 } from '../controllers/order.controller';
+import { getAdminStats } from '../controllers/admin.controller';
 import { expirePendingOrders } from '../jobs/expirePendingOrders';
 import { calculateCouponDiscountCents } from '../controllers/coupon.controller';
 
@@ -20,11 +24,20 @@ function createMockRes() {
   const res: any = {
     statusCode: 200,
     body: null,
+    headers: {} as Record<string, string>,
+    setHeader(name: string, value: string) {
+      res.headers[name] = value;
+      return res;
+    },
     status(code: number) {
       res.statusCode = code;
       return res;
     },
     json(payload: any) {
+      res.body = payload;
+      return res;
+    },
+    send(payload: any) {
       res.body = payload;
       return res;
     },
@@ -565,5 +578,87 @@ describe('Fluxos críticos do E-commerce (Fase 6)', () => {
       resFromFinal
     );
     expect(resFromFinal.statusCode).toBe(409);
+  });
+
+  it('7. Filtro needsManualReview, manualReviewCount em stats, coluna no CSV e PATCH /api/orders/:id/review', async () => {
+    const product = await createTestProduct(5, 120);
+    const resCreate = createMockRes();
+    await createPaymentIntent(
+      {
+        user: { id: testUserId, role: 'CUSTOMER' },
+        body: {
+          items: [{ productId: product.id, quantity: 1 }],
+          customerInfo: validCustomerInfo,
+        },
+      } as any,
+      resCreate
+    );
+    const orderId = resCreate.body.data.orderId;
+    createdOrderIds.push(orderId);
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { needsManualReview: true },
+    });
+
+    // GET /api/orders/admin?needsManualReview=true
+    const resList = createMockRes();
+    await getAdminOrders(
+      {
+        query: { needsManualReview: 'true', q: orderId },
+        user: { id: testAdminId, role: 'ADMIN' },
+      } as any,
+      resList
+    );
+    expect(resList.statusCode).toBe(200);
+    expect(resList.body.data.some((o: any) => o.id === orderId && o.needsManualReview === true)).toBe(true);
+
+    // GET /api/admin/stats inclui manualReviewCount >= 1
+    const resStats = createMockRes();
+    await getAdminStats(
+      {
+        query: {},
+        user: { id: testAdminId, role: 'ADMIN' },
+      } as any,
+      resStats
+    );
+    expect(resStats.statusCode).toBe(200);
+    expect(resStats.body.data.manualReviewCount).toBeGreaterThanOrEqual(1);
+
+    // GET /api/orders/admin/export?needsManualReview=true inclui coluna "Revisão manual" com "Sim"
+    const resCsv = createMockRes();
+    await exportAdminOrdersCsv(
+      {
+        query: { needsManualReview: 'true', q: orderId },
+        user: { id: testAdminId, role: 'ADMIN' },
+      } as any,
+      resCsv
+    );
+    expect(resCsv.statusCode).toBe(200);
+    expect(String(resCsv.body)).toContain('Revisão manual');
+    expect(String(resCsv.body)).toContain(';Sim;');
+
+    // PATCH /api/orders/:id/review limpa needsManualReview de forma idempotente
+    const resReview1 = createMockRes();
+    await markOrderReviewed(
+      {
+        params: { id: orderId },
+        user: { id: testAdminId, role: 'ADMIN' },
+      } as any,
+      resReview1
+    );
+    expect(resReview1.statusCode).toBe(200);
+    expect(resReview1.body.data.needsManualReview).toBe(false);
+
+    const resReview2 = createMockRes();
+    await markOrderReviewed(
+      {
+        params: { id: orderId },
+        user: { id: testAdminId, role: 'ADMIN' },
+      } as any,
+      resReview2
+    );
+    expect(resReview2.statusCode).toBe(200);
+    expect(resReview2.body.data.needsManualReview).toBe(false);
   });
 });

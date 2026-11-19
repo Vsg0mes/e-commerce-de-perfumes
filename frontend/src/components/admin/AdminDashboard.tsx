@@ -42,12 +42,17 @@ interface StatsData {
     last30Days: PeriodSummary;
   };
   ordersByStatus: Record<OrderStatus, number>;
+  manualReviewCount?: number;
   lowStockLimit: number;
   lowStockProducts: LowStockProduct[];
   topSellingProducts: TopSellingProduct[];
 }
 
-export function AdminDashboard() {
+interface AdminDashboardProps {
+  onOpenManualReviewOrders?: () => void;
+}
+
+export function AdminDashboard({ onOpenManualReviewOrders }: AdminDashboardProps) {
   const { token } = useAuthStore();
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
 
@@ -111,6 +116,34 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-8">
+      {(stats.manualReviewCount ?? 0) > 0 && (
+        <div
+          role="alert"
+          onClick={onOpenManualReviewOrders}
+          className="cursor-pointer rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-5 shadow-sm hover:bg-amber-100/70 dark:hover:bg-amber-950/60 transition-colors flex flex-wrap items-center justify-between gap-4"
+        >
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-200/80 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200">
+              <AlertTriangle size={22} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-amber-900 dark:text-amber-100">
+                {stats.manualReviewCount}{' '}
+                {stats.manualReviewCount === 1
+                  ? 'pedido requer revisão manual'
+                  : 'pedidos requerem revisão manual'}
+              </h2>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                Pagamentos recebidos após expiração ou reembolsos parciais na Stripe. Clique para revisar.
+              </p>
+            </div>
+          </div>
+          <span className="px-4 py-2 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors">
+            Ver pedidos para revisão →
+          </span>
+        </div>
+      )}
+
       {/* Receita e pedidos pagos por período */}
       <div className="grid gap-4 sm:grid-cols-3">
         {periodCards.map(({ label, data }) => (

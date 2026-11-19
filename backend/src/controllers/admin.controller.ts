@@ -35,49 +35,59 @@ export const getAdminStats = async (req: AuthRequest, res: Response) => {
       paymentStatus: 'APPROVED',
     };
 
-    const [todayAgg, days7Agg, days30Agg, byStatusRaw, lowStockProducts, topItemsGrouped] =
-      await Promise.all([
-        prisma.order.aggregate({
-          where: { ...paidBaseWhere, createdAt: { gte: startOfToday } },
-          _count: { _all: true },
-          _sum: { totalAmount: true },
-        }),
-        prisma.order.aggregate({
-          where: { ...paidBaseWhere, createdAt: { gte: last7Days } },
-          _count: { _all: true },
-          _sum: { totalAmount: true },
-        }),
-        prisma.order.aggregate({
-          where: { ...paidBaseWhere, createdAt: { gte: last30Days } },
-          _count: { _all: true },
-          _sum: { totalAmount: true },
-        }),
-        prisma.order.groupBy({
-          by: ['status'],
-          _count: { _all: true },
-        }),
-        prisma.product.findMany({
-          where: { stock: { lte: lowStockLimit } },
-          orderBy: [{ stock: 'asc' }, { name: 'asc' }],
-          take: 25,
-          select: {
-            id: true,
-            name: true,
-            stock: true,
-            price: true,
-            promotionalPrice: true,
-            isActive: true,
-            brand: { select: { name: true } },
-          },
-        }),
-        prisma.orderItem.groupBy({
-          by: ['productId'],
-          where: { order: paidBaseWhere },
-          _sum: { quantity: true },
-          orderBy: { _sum: { quantity: 'desc' } },
-          take: 5,
-        }),
-      ]);
+    const [
+      todayAgg,
+      days7Agg,
+      days30Agg,
+      byStatusRaw,
+      lowStockProducts,
+      topItemsGrouped,
+      manualReviewCount,
+    ] = await Promise.all([
+      prisma.order.aggregate({
+        where: { ...paidBaseWhere, createdAt: { gte: startOfToday } },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
+      prisma.order.aggregate({
+        where: { ...paidBaseWhere, createdAt: { gte: last7Days } },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
+      prisma.order.aggregate({
+        where: { ...paidBaseWhere, createdAt: { gte: last30Days } },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
+      prisma.order.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+      }),
+      prisma.product.findMany({
+        where: { stock: { lte: lowStockLimit } },
+        orderBy: [{ stock: 'asc' }, { name: 'asc' }],
+        take: 25,
+        select: {
+          id: true,
+          name: true,
+          stock: true,
+          price: true,
+          promotionalPrice: true,
+          isActive: true,
+          brand: { select: { name: true } },
+        },
+      }),
+      prisma.orderItem.groupBy({
+        by: ['productId'],
+        where: { order: paidBaseWhere },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 5,
+      }),
+      prisma.order.count({
+        where: { needsManualReview: true },
+      }),
+    ]);
 
     const ordersByStatus: Record<OrderStatus, number> = {
       PENDING: 0,
@@ -141,6 +151,7 @@ export const getAdminStats = async (req: AuthRequest, res: Response) => {
           },
         },
         ordersByStatus,
+        manualReviewCount,
         lowStockLimit,
         lowStockProducts,
         topSellingProducts,

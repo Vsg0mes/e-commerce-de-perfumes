@@ -389,6 +389,7 @@ export const getMyOrders = async (req: AuthRequest, res: Response) => {
 const adminListSchema = paginationSchema.extend({
   status: orderStatusEnum.optional(),
   paymentStatus: paymentStatusEnum.optional(),
+  needsManualReview: z.enum(['true', 'false']).optional(),
   q: z.string().trim().max(100).optional(),
   sort: z.enum(['asc', 'desc']).default('desc'),
 });
@@ -396,11 +397,12 @@ const adminListSchema = paginationSchema.extend({
 /** GET /api/orders/admin — listagem paginada de todos os pedidos (ADMIN). */
 export const getAdminOrders = async (req: AuthRequest, res: Response) => {
   try {
-    const { page, limit, status, paymentStatus, q, sort } = adminListSchema.parse(req.query);
+    const { page, limit, status, paymentStatus, needsManualReview, q, sort } = adminListSchema.parse(req.query);
 
     const where: Prisma.OrderWhereInput = {
       ...(status && { status }),
       ...(paymentStatus && { paymentStatus }),
+      ...(needsManualReview !== undefined && { needsManualReview: needsManualReview === 'true' }),
       ...(q && {
         OR: [
           { id: { contains: q, mode: 'insensitive' } },
@@ -447,6 +449,7 @@ export const getAdminOrders = async (req: AuthRequest, res: Response) => {
 const adminExportSchema = z.object({
   status: orderStatusEnum.optional(),
   paymentStatus: paymentStatusEnum.optional(),
+  needsManualReview: z.enum(['true', 'false']).optional(),
   q: z.string().trim().max(100).optional(),
   sort: z.enum(['asc', 'desc']).default('desc'),
 });
@@ -465,11 +468,12 @@ const csvEscape = (value: unknown): string => {
  */
 export const exportAdminOrdersCsv = async (req: AuthRequest, res: Response) => {
   try {
-    const { status, paymentStatus, q, sort } = adminExportSchema.parse(req.query);
+    const { status, paymentStatus, needsManualReview, q, sort } = adminExportSchema.parse(req.query);
 
     const where: Prisma.OrderWhereInput = {
       ...(status && { status }),
       ...(paymentStatus && { paymentStatus }),
+      ...(needsManualReview !== undefined && { needsManualReview: needsManualReview === 'true' }),
       ...(q && {
         OR: [
           { id: { contains: q, mode: 'insensitive' } },
@@ -493,6 +497,7 @@ export const exportAdminOrdersCsv = async (req: AuthRequest, res: Response) => {
       'Telefone',
       'Status do Pedido',
       'Status do Pagamento',
+      'Revisão manual',
       'Frete (R$)',
       'Desconto (R$)',
       'Total (R$)',
@@ -513,6 +518,7 @@ export const exportAdminOrdersCsv = async (req: AuthRequest, res: Response) => {
         o.user?.phone ?? '',
         o.status,
         o.paymentStatus,
+        o.needsManualReview ? 'Sim' : 'Não',
         Number(o.shippingAmount).toFixed(2).replace('.', ','),
         Number(o.discountAmount).toFixed(2).replace('.', ','),
         Number(o.totalAmount).toFixed(2).replace('.', ','),
@@ -744,5 +750,38 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
     }
     console.error('Error updating order status:', error);
     res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+  }
+};
+
+/**
+ * PATCH /api/orders/:id/review — limpa needsManualReview após o admin tratar o caso (ADMIN).
+ * Idempotente com updateMany condicional.
+ */
+export const markOrderReviewed = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
+    }
+
+    await prisma.order.updateMany({
+      where: { id, needsManualReview: true },
+      data: { needsManualReview: false },
+    });
+
+    const updated = await prisma.order.findUnique({
+      where: { id },
+      include: { items: itemsInclude, address: true, coupon: couponSelect, user: { select: customerSelect } },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Pedido marcado como revisado',
+      data: updated,
+    });
+  } catch (error) {
+    console.error('Error marking order as reviewed:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno no servidor' });
   }
 };
