@@ -9,6 +9,7 @@ interface CouponItem {
   code: string;
   discountType: 'PERCENTAGE' | 'FIXED';
   discountValue: number;
+  minOrderAmount: number | null;
   startDate: string;
   expirationDate: string;
   usageLimit: number | null;
@@ -35,6 +36,7 @@ const defaultForm = () => ({
   code: '',
   discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FIXED',
   discountValue: '',
+  minOrderAmount: '',
   startDate: toLocalDatetimeInput(new Date().toISOString()),
   expirationDate: toLocalDatetimeInput(
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -86,6 +88,7 @@ export function AdminCoupons({ onMessage }: Props) {
       code: c.code,
       discountType: c.discountType,
       discountValue: String(c.discountValue),
+      minOrderAmount: c.minOrderAmount != null ? String(c.minOrderAmount) : '',
       startDate: toLocalDatetimeInput(c.startDate),
       expirationDate: toLocalDatetimeInput(c.expirationDate),
       usageLimit: c.usageLimit != null ? String(c.usageLimit) : '',
@@ -102,6 +105,7 @@ export function AdminCoupons({ onMessage }: Props) {
         code: form.code.trim().toUpperCase(),
         discountType: form.discountType,
         discountValue: Number(form.discountValue),
+        minOrderAmount: form.minOrderAmount.trim() ? Number(form.minOrderAmount) : null,
         startDate: new Date(form.startDate).toISOString(),
         expirationDate: new Date(form.expirationDate).toISOString(),
         usageLimit: form.usageLimit.trim() ? Number(form.usageLimit) : null,
@@ -246,6 +250,19 @@ export function AdminCoupons({ onMessage }: Props) {
               className={fieldClass}
             />
           </div>
+
+          <div>
+            <label className={labelClass}>Pedido Mínimo em R$ (opcional)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Sem mínimo"
+              value={form.minOrderAmount}
+              onChange={(e) => setForm({ ...form, minOrderAmount: e.target.value })}
+              className={fieldClass}
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
@@ -276,6 +293,7 @@ export function AdminCoupons({ onMessage }: Props) {
             <tr>
               <th className="px-4 py-3">Código</th>
               <th className="px-4 py-3">Desconto</th>
+              <th className="px-4 py-3">Pedido Mínimo</th>
               <th className="px-4 py-3">Validade</th>
               <th className="px-4 py-3 text-center">Usos</th>
               <th className="px-4 py-3 text-center">Status</th>
@@ -285,14 +303,14 @@ export function AdminCoupons({ onMessage }: Props) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
             {loading && coupons.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
                   Carregando cupons...
                 </td>
               </tr>
             )}
             {!loading && coupons.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
                   Nenhum cupom cadastrado.
                 </td>
               </tr>
@@ -308,6 +326,11 @@ export function AdminCoupons({ onMessage }: Props) {
                     {c.discountType === 'PERCENTAGE'
                       ? `${Number(c.discountValue)}%`
                       : formatBRL(Number(c.discountValue))}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {c.minOrderAmount != null && Number(c.minOrderAmount) > 0
+                      ? formatBRL(Number(c.minOrderAmount))
+                      : 'Sem mínimo'}
                   </td>
                   <td className="px-4 py-3 text-xs">
                     <div>De: {formatDate(c.startDate)}</div>

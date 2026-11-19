@@ -128,7 +128,7 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
       : null;
 
     if (normalizedCouponCode) {
-      const couponError = getCouponValidationError(coupon);
+      const couponError = getCouponValidationError(coupon, new Date(), subtotalCents);
       if (couponError || !coupon) {
         return res.status(400).json({ success: false, message: couponError || 'Cupom inválido' });
       }

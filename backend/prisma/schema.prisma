@@ -136,6 +136,7 @@ model Coupon {
   code           String       @unique
   discountType   DiscountType
   discountValue  Decimal      @db.Decimal(10, 2)
+  minOrderAmount Decimal?     @db.Decimal(10, 2)
   startDate      DateTime
   expirationDate DateTime
   usageLimit     Int?

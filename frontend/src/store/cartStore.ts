@@ -69,20 +69,19 @@ export const useCartStore = create<CartStore>()(
 
         const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
         const notices: string[] = [];
-        const updatedItems: CartItem[] = [];
 
-        await Promise.all(
-          currentItems.map(async (item) => {
+        const results = await Promise.all(
+          currentItems.map(async (item): Promise<CartItem | null> => {
             try {
               const res = await axios.get(`${apiBase}/products/${item.productId}`);
               const prod = res.data?.data;
               if (!prod || !prod.isActive) {
                 notices.push(`"${item.name}" não está mais disponível e foi removido da sacola.`);
-                return;
+                return null;
               }
               if (prod.stock <= 0) {
                 notices.push(`"${prod.name}" esgotou e foi removido da sacola.`);
-                return;
+                return null;
               }
 
               const currentPrice = Number(prod.promotionalPrice ?? prod.price);
@@ -100,25 +99,26 @@ export const useCartStore = create<CartStore>()(
                 );
               }
 
-              updatedItems.push({
+              return {
                 ...item,
                 name: prod.name,
                 price: currentPrice,
                 image: prod.image || item.image,
                 quantity: nextQty,
                 maxStock: prod.stock,
-              });
+              };
             } catch (err) {
               if (axios.isAxiosError(err) && err.response?.status === 404) {
                 notices.push(`"${item.name}" não está mais disponível e foi removido da sacola.`);
-              } else {
-                // Em caso de falha de rede pontual, mantém o item atual
-                updatedItems.push(item);
+                return null;
               }
+              // Em caso de falha de rede pontual, mantém o item atual na sua posição original
+              return item;
             }
           })
         );
 
+        const updatedItems = results.filter((item): item is CartItem => item !== null);
         set({ items: updatedItems });
         return notices;
       },

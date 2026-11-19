@@ -30,10 +30,15 @@ export function calculateCouponDiscountCents(
 }
 
 /**
- * Verifica se o cupom existe, está ativo, dentro da validade e com usos disponíveis.
+ * Verifica se o cupom existe, está ativo, dentro da validade, com usos disponíveis
+ * e (quando subtotalCents é informado) se atinge o valor mínimo de pedido (minOrderAmount) ANTES do desconto.
  * Retorna uma mensagem de erro em português se inválido, ou `null` se válido.
  */
-export function getCouponValidationError(coupon: Coupon | null, now: Date = new Date()): string | null {
+export function getCouponValidationError(
+  coupon: Coupon | null,
+  now: Date = new Date(),
+  subtotalCents?: number
+): string | null {
   if (!coupon || !coupon.isActive) {
     return 'Cupom inválido ou inativo';
   }
@@ -45,6 +50,17 @@ export function getCouponValidationError(coupon: Coupon | null, now: Date = new 
   }
   if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
     return 'Este cupom atingiu o limite máximo de usos';
+  }
+  if (
+    subtotalCents !== undefined &&
+    coupon.minOrderAmount !== null &&
+    coupon.minOrderAmount !== undefined
+  ) {
+    const minCents = toCents(coupon.minOrderAmount);
+    if (minCents > 0 && subtotalCents < minCents) {
+      const formattedMin = (minCents / 100).toFixed(2).replace('.', ',');
+      return `Pedido mínimo de R$ ${formattedMin} para este cupom`;
+    }
   }
   return null;
 }
@@ -63,6 +79,10 @@ const couponBodySchema = z
     discountValue: z.coerce
       .number({ required_error: 'Informe o valor do desconto' })
       .positive('O valor do desconto deve ser maior que zero'),
+    minOrderAmount: z.preprocess(
+      (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+      z.number().min(0, 'O valor mínimo do pedido não pode ser negativo').nullable().optional()
+    ),
     startDate: z.coerce.date({ required_error: 'Informe a data inicial' }),
     expirationDate: z.coerce.date({ required_error: 'Informe a data de expiração' }),
     usageLimit: z.preprocess(
@@ -109,6 +129,10 @@ export const createCoupon = async (req: Request, res: Response) => {
         code: data.code,
         discountType: data.discountType,
         discountValue: toCents(data.discountValue) / 100,
+        minOrderAmount:
+          data.minOrderAmount !== null && data.minOrderAmount !== undefined
+            ? toCents(data.minOrderAmount) / 100
+            : null,
         startDate: data.startDate,
         expirationDate: data.expirationDate,
         usageLimit: data.usageLimit ?? null,
@@ -151,6 +175,10 @@ export const updateCoupon = async (req: Request, res: Response) => {
         code: data.code,
         discountType: data.discountType,
         discountValue: toCents(data.discountValue) / 100,
+        minOrderAmount:
+          data.minOrderAmount !== null && data.minOrderAmount !== undefined
+            ? toCents(data.minOrderAmount) / 100
+            : null,
         startDate: data.startDate,
         expirationDate: data.expirationDate,
         usageLimit: data.usageLimit ?? null,
@@ -209,14 +237,14 @@ export const validateCoupon = async (req: Request, res: Response) => {
   try {
     const { code, subtotal } = validateCouponSchema.parse(req.body);
     const normalizedCode = code.toUpperCase();
+    const subtotalCents = toCents(subtotal);
 
     const coupon = await prisma.coupon.findUnique({ where: { code: normalizedCode } });
-    const validationErr = getCouponValidationError(coupon);
+    const validationErr = getCouponValidationError(coupon, new Date(), subtotalCents);
     if (validationErr || !coupon) {
       return res.status(400).json({ success: false, message: validationErr || 'Cupom inválido' });
     }
 
-    const subtotalCents = toCents(subtotal);
     const discountCents = calculateCouponDiscountCents(
       subtotalCents,
       coupon.discountType,
@@ -230,6 +258,7 @@ export const validateCoupon = async (req: Request, res: Response) => {
         code: coupon.code,
         discountType: coupon.discountType,
         discountValue: Number(coupon.discountValue),
+        minOrderAmount: coupon.minOrderAmount !== null ? Number(coupon.minOrderAmount) : null,
         discountAmount: discountCents / 100,
       },
     });

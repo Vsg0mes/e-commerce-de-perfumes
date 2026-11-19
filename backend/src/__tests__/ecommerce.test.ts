@@ -24,7 +24,10 @@ import {
 } from '../controllers/order.controller';
 import { getAdminStats } from '../controllers/admin.controller';
 import { expirePendingOrders } from '../jobs/expirePendingOrders';
-import { calculateCouponDiscountCents } from '../controllers/coupon.controller';
+import {
+  calculateCouponDiscountCents,
+  validateCoupon,
+} from '../controllers/coupon.controller';
 
 function createMockRes() {
   const res: any = {
@@ -486,6 +489,51 @@ describe('Fluxos críticos do E-commerce (Fase 6)', () => {
 
     const couponAfterCancel = await prisma.coupon.findUniqueOrThrow({ where: { id: coupon.id } });
     expect(couponAfterCancel.usedCount).toBe(0);
+
+    // Cupom com minOrderAmount exige subtotal mínimo antes do desconto
+    const minCoupon = await prisma.coupon.create({
+      data: {
+        code: `MIN300_${Date.now()}`,
+        discountType: 'FIXED',
+        discountValue: 50,
+        minOrderAmount: 300,
+        startDate: new Date(Date.now() - 60_000),
+        expirationDate: new Date(Date.now() + 3600_000),
+        isActive: true,
+      },
+    });
+    createdCouponIds.push(minCoupon.id);
+
+    const resValLow = createMockRes();
+    await validateCoupon(
+      { body: { code: minCoupon.code, subtotal: 200 } } as any,
+      resValLow
+    );
+    expect(resValLow.statusCode).toBe(400);
+    expect(resValLow.body.message).toContain('Pedido mínimo de R$ 300,00 para este cupom');
+
+    const resCreateLow = createMockRes();
+    await createPaymentIntent(
+      {
+        user: { id: testUserId, role: 'CUSTOMER' },
+        body: {
+          items: [{ productId: product.id, quantity: 1 }], // subtotal 200 < 300
+          couponCode: minCoupon.code,
+          customerInfo: validCustomerInfo,
+        },
+      } as any,
+      resCreateLow
+    );
+    expect(resCreateLow.statusCode).toBe(400);
+    expect(resCreateLow.body.message).toContain('Pedido mínimo de R$ 300,00 para este cupom');
+
+    const resValOk = createMockRes();
+    await validateCoupon(
+      { body: { code: minCoupon.code, subtotal: 400 } } as any,
+      resValOk
+    );
+    expect(resValOk.statusCode).toBe(200);
+    expect(resValOk.body.data.discountAmount).toBe(50);
   });
 
   it('6. Transições de status do pedido (PAID -> PROCESSING -> SHIPPED -> DELIVERED e bloqueios)', async () => {

@@ -111,19 +111,20 @@ docker compose exec frontend npm run build
 
 ### Cupons, Frete, Pagamentos e Pedidos
 - `GET /api/shipping/quote?zipCode=...`: Calcula frete e prazo por faixa de CEP
-- `POST /api/coupons/validate`: Valida código de cupom e calcula o desconto no servidor
-- `GET /api/coupons` | `POST /api/coupons` | `PUT /api/coupons/:id` | `DELETE /api/coupons/:id`: CRUD de cupons (ADMIN)
-- `POST /api/payments/create-payment-intent`: Valida CPF/CEP/UF, reserva estoque e uso de cupom atomicamente, cria o `Order` (`PENDING`, expiração em 30 min) e cria o `PaymentIntent` na Stripe
-- `POST /api/payments/webhook`: Processa `payment_intent.succeeded`, `payment_intent.payment_failed` e `charge.refunded` de forma idempotente
+- `POST /api/coupons/validate`: Valida código de cupom (incluindo pedido mínimo `minOrderAmount` antes do desconto) e calcula o desconto no servidor
+- `GET /api/coupons` | `POST /api/coupons` | `PUT /api/coupons/:id` | `DELETE /api/coupons/:id`: CRUD de cupons com suporte a `minOrderAmount` (ADMIN)
+- `POST /api/payments/create-payment-intent`: Valida CPF/CEP/UF, reserva estoque e uso de cupom atomicamente, cria o `Order` (`PENDING`, expiração configurável via `ORDER_EXPIRATION_MINUTES`, padrão 60 min) e cria o `PaymentIntent` na Stripe com métodos explícitos (`STRIPE_PAYMENT_METHODS`, padrão `card,pix`)
+- `POST /api/payments/webhook`: Processa `payment_intent.succeeded`, `payment_intent.payment_failed` e `charge.refunded` de forma idempotente (tanto para cartão quanto para Pix). Reembolsos totais (`charge.refunded === true` e `amount_refunded === amount`) cancelam o pedido e devolvem estoque/cupom; reembolsos parciais não cancelam o pedido nem devolvem estoque, marcando `needsManualReview = true` para decisão do admin
 - `GET /api/orders/mine`: Lista paginada de pedidos do cliente autenticado
 - `GET /api/orders/:id`: Detalhes de um pedido (dono ou ADMIN)
-- `POST /api/orders/:id/payment-intent`: Retoma pagamento de pedido `PENDING` não expirado reutilizando o `PaymentIntent`
+- `POST /api/orders/:id/payment-intent`: Retoma pagamento de pedido `PENDING` não expirado reutilizando o `PaymentIntent` (reexibindo o QR Code Pix ou formulário de cartão)
 - `POST /api/orders/:id/cancel`: Cancela pedido `PENDING` do próprio cliente devolvendo estoque e cupom
-- `GET /api/orders/admin`: Lista paginada e filtrável de todos os pedidos (ADMIN)
-- `GET /api/orders/admin/export`: Exporta pedidos filtrados em CSV com BOM UTF-8 (ADMIN)
+- `GET /api/orders/admin`: Lista paginada e filtrável de todos os pedidos, incluindo filtro `needsManualReview=true` e badge **"Revisar"** para casos de atenção (ADMIN)
+- `GET /api/orders/admin/export`: Exporta pedidos filtrados em CSV com BOM UTF-8 e coluna `"Revisão manual"` (`Sim`/`Não`) (ADMIN)
 - `PATCH /api/orders/:id/status`: Atualiza status do pedido (`PAID → PROCESSING → SHIPPED → DELIVERED`, `PENDING/PAID/PROCESSING → CANCELLED`) (ADMIN)
-- `POST /api/orders/:id/refund`: Cancela e reembolsa integralmente na Stripe pedidos `PAID` ou `PROCESSING`, devolvendo estoque e uso de cupom uma única vez (ADMIN)
+- `PATCH /api/orders/:id/review`: Marca um pedido com `needsManualReview=true` como revisado (`needsManualReview=false`) de forma idempotente (ADMIN)
+- `POST /api/orders/:id/refund`: Cancela e reembolsa integralmente na Stripe (cartão ou Pix) pedidos `PAID`, `PROCESSING` ou pagos tardiamente após expiração, devolvendo estoque e uso de cupom uma única vez (ADMIN)
 
 ### Dashboard e Clientes (Admin)
-- `GET /api/admin/stats`: Métricas agregadas (receita e pedidos pagos de hoje, 7 e 30 dias, pedidos por status, top 5 mais vendidos e produtos com estoque baixo)
+- `GET /api/admin/stats`: Métricas agregadas (receita e pedidos pagos de hoje, 7 e 30 dias, pedidos por status, `manualReviewCount` com card de alerta para revisão manual, top 5 mais vendidos e produtos com estoque baixo)
 - `GET /api/admin/customers`: Lista paginada de clientes com busca, total de pedidos e valor total gasto
