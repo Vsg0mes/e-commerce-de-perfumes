@@ -339,15 +339,19 @@ describe('Fluxos críticos do E-commerce (Fase 6)', () => {
       currency: 'brl',
     } as any);
 
-    // Duas chamadas simultâneas a refundOrder + webhook charge.refunded concorrente
+    // Duas chamadas simultâneas a refundOrder + webhook charge.refunded total concorrente
     const r1 = createMockRes();
     const r2 = createMockRes();
     await Promise.all([
       refundOrder({ params: { id: orderId }, user: { id: testAdminId, role: 'ADMIN' } } as any, r1),
       refundOrder({ params: { id: orderId }, user: { id: testAdminId, role: 'ADMIN' } } as any, r2),
       handleChargeRefunded({
+        id: 'ch_full_vitest',
         payment_intent: 'pi_refund_vitest',
         metadata: { orderId },
+        refunded: true,
+        amount: 41800,
+        amount_refunded: 41800,
       } as any),
     ]);
 
@@ -359,6 +363,44 @@ describe('Fluxos críticos do E-commerce (Fase 6)', () => {
     expect(refundedOrder.status).toBe('CANCELLED');
     expect(refundedOrder.paymentStatus).toBe('REFUNDED');
     expect(prodAfterRefund.stock).toBe(5); // devolvido exatamente 1x
+
+    // Reembolso PARCIAL via webhook charge.refunded: não cancela, não devolve estoque e marca needsManualReview
+    const resPartialOrder = createMockRes();
+    await createPaymentIntent(
+      {
+        user: { id: testUserId, role: 'CUSTOMER' },
+        body: {
+          items: [{ productId: product.id, quantity: 1 }],
+          customerInfo: validCustomerInfo,
+        },
+      } as any,
+      resPartialOrder
+    );
+    const partialOrderId = resPartialOrder.body.data.orderId;
+    createdOrderIds.push(partialOrderId);
+
+    await handlePaymentSucceeded({
+      id: 'pi_partial_refund_vitest',
+      metadata: { orderId: partialOrderId },
+      amount_received: 21800,
+      currency: 'brl',
+    } as any);
+
+    await handleChargeRefunded({
+      id: 'ch_partial_vitest',
+      payment_intent: 'pi_partial_refund_vitest',
+      metadata: { orderId: partialOrderId },
+      refunded: false,
+      amount: 21800,
+      amount_refunded: 5000,
+    } as any);
+
+    const partialOrder = await prisma.order.findUniqueOrThrow({ where: { id: partialOrderId } });
+    const prodAfterPartial = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(partialOrder.status).toBe('PAID');
+    expect(partialOrder.paymentStatus).toBe('APPROVED');
+    expect(partialOrder.needsManualReview).toBe(true);
+    expect(prodAfterPartial.stock).toBe(4); // estoque permanece reservado/baixado
   });
 
   it('5. Aplicação de cupom no servidor, limite de uso atômico e devolução ao cancelar', async () => {

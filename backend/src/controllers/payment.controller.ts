@@ -340,7 +340,10 @@ export async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
 
 /**
  * Trata `charge.refunded` (reembolso iniciado pela API ou diretamente no painel da Stripe).
- * Atualiza paymentStatus para REFUNDED, cancela o pedido e devolve o estoque sem duplicar.
+ * - Reembolso total (`charge.refunded === true` e `charge.amount_refunded === charge.amount`):
+ *   atualiza paymentStatus para REFUNDED, cancela o pedido e devolve o estoque/cupom sem duplicar.
+ * - Reembolso parcial: não cancela o pedido, não devolve estoque e não altera o cupom;
+ *   registra aviso no log e marca `needsManualReview = true` para decisão do admin.
  */
 export async function handleChargeRefunded(charge: Stripe.Charge) {
   const paymentIntentId =
@@ -362,6 +365,23 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
   });
 
   if (!order) return;
+
+  const isFullRefund =
+    charge.refunded === true &&
+    typeof charge.amount === 'number' &&
+    charge.amount > 0 &&
+    charge.amount_refunded === charge.amount;
+
+  if (!isFullRefund) {
+    console.warn(
+      `[REVISÃO MANUAL] Reembolso parcial detectado no pedido ${order.id} (charge=${charge.id}): reembolsado ${charge.amount_refunded} de ${charge.amount} centavos. Pedido mantido ativo e marcado com needsManualReview=true.`
+    );
+    await prisma.order.updateMany({
+      where: { id: order.id },
+      data: { needsManualReview: true },
+    });
+    return;
+  }
 
   await applyOrderRefundInDb(order.id);
 }
